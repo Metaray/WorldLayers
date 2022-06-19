@@ -7,6 +7,8 @@ from time import perf_counter as clock
 from common import *
 from accelerators import *
 
+CTR_DTYPE = np.int64 # Histogram counter type
+
 
 def scan_world_dimension(save_path: str, dim_id: int, scan_limit: int, bounds: Tuple[int, int]) -> DimScanData:
     """Scanner for versions >=1.2.1 <=1.12.2"""
@@ -85,6 +87,7 @@ def scan_world_dimension_new(save_path: str, dim_id: int, scan_limit: int, bound
     blockstate_to_idx = {
         'minecraft:air': 0,
         'minecraft:cave_air': 1,
+        'minecraft:void_air': 2,
     }
     STATE_LIM = max(blockstate_to_idx.values()) + 1
     
