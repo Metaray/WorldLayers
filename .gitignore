@@ -1,6 +1,7 @@
 # Project specific files
 *.dat
 *.png
+!/images/**
 *.dll
 *.txt
 
