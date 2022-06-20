@@ -9,6 +9,9 @@ class InvalidScannerOperation(Exception):
     pass
 
 
+AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
+
+
 def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
     extract_file = args.output
     save_scan_data(extract_file, scan_data)
@@ -20,43 +23,38 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
     chunks_scanned = scan_data.chunks_scanned
     idx_to_blockstate = scan_data.idx_to_blockstate
     HEI_LIM = scan_data.height
-    STATE_LIM = scan_data.state_count
     
     totals = block_counts.sum(axis=0)
     volume = chunks_scanned * (HEI_LIM * 16**2)
 
     def show_count(name: str, count: int) -> None:
-        parts = [
+        print(
             f'{name} = {count}',
             f'({count / volume:%})',
             f'({count / chunks_scanned:.4f} b/ch)',
-        ]
-        print(*parts, sep='\t')
+            sep='\t'
+        )
 
-    nonzero = [(totals[idx], idx) for idx in range(16, STATE_LIM) if totals[idx] > 0]
+    visdata = [(i, totals[i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
     if args.sort == 'count':
-        # 'count' descending
-        nonzero.sort(key=lambda ci: -ci[0])
+        visdata.sort(key=lambda ci: -ci[1])  # sort by block count descending
+    elif args.sort == 'name':
+        visdata.sort(key=lambda ci: ci[2])  # sort by blockstate lexicographically
     else:
-        # 'id' ascending
-        nonzero.sort(key=lambda ci: ci[1])
+        visdata.sort(key=lambda ci: ci[0])  # sort by state id ascending (legacy)
     
-    show_count('Nonair blocks', totals[16:].sum())
-    for count, idx in nonzero:
-        bid, meta = idx // 16, idx % 16
-        if bid in idx_to_blockstate:
-            name = idx_to_blockstate[bid]
-        else:
-            name = str(bid)
-        show_count(format_blockstate((name, meta)), count)
+    print(f'{scan_data.state_count} block states')
+
+    airsum = sum(scan_data.try_get_block_hist((name, None)) for name in AIR_BLOCKS).sum()
+    show_count('Nonair blocks', totals.sum() - airsum)
+
+    for _, total, name in visdata:
+        show_count(name, total)
 
 
 class DisplayBlockSelector(NamedTuple):
-    # Numeric block id or string name [ + '.' + numeric metadata / None for sum of all values ]
-    # Examples:
-    #   minecraft:stone
-    #   minecraft:log.2
-    #   123.6
+    # Blockstate selector
+    # '+' separated list of CompactState
     names: str
     # Matplotlib colors / None for auto color
     color: Optional[str]
@@ -73,6 +71,10 @@ def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
         while len(parts) < 3:
             parts.append('')
         
+        # Test for selector correctness
+        for name in parts[0].split('+'):
+            parse_blockstate_name(name)
+
         blocks_shown.append(DisplayBlockSelector(
             names=parts[0],
             color=parts[1] if parts[1] else None,
@@ -110,7 +112,7 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
     if args.norm == 'base':
         # Normalize by base block - relative fraction
-        normalize_base = ('minecraft:stone', 0) # TODO: make this configurable
+        normalize_base = parse_blockstate_name('minecraft:stone')  # TODO: make this configurable
         base_mx = np.maximum(scan_data.get_block_hist(normalize_base), 1)
         norm_func = lambda x: x / base_mx
         y_label = f'Fraction relative to {format_blockstate(normalize_base)}'
@@ -144,13 +146,18 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
         disp_name = show_info.display_name or show_info.names
 
         hist = np.zeros(HEI_LIM, dtype=CTR_DTYPE)
+        found_any = False
         for bs_name in show_info.names.split('+'):
             try:
                 hist += scan_data.get_block_hist(parse_blockstate_name(bs_name))
-            except ValueError as err:
-                # Ignore blocks we don't have / have invalid selector
-                print(err)
-        print(f'{disp_name} = {hist.sum()} blocks')
+                found_any = True
+            except ValueError:
+                pass  # Ignore blocks we don't have / have invalid selector
+        
+        if found_any:
+            print(f'{disp_name} = {hist.sum()} blocks')
+        else:
+            print(f'Found no blocks matching selector: {show_info.names}')
         
         hist = norm_func(hist)
         if not cumulative:
@@ -226,7 +233,7 @@ def add_operation_parsers(parser: argparse.ArgumentParser) -> None:
     subparsets = parser.add_subparsers(dest='vismode', required=True, help='Visualization choice')
     
     parse_vis_print = subparsets.add_parser('print', help='Write block counts to console')
-    parse_vis_print.add_argument('--sort', choices=['id', 'count'], default='count', help='Block counts ordering')
+    parse_vis_print.add_argument('--sort', choices=['id', 'count', 'name'], default='count', help='Block counts ordering')
     
     parse_vis_plot = subparsets.add_parser('plot', help='Plot histogram of block distribution')
     parse_vis_plot.add_argument('select', help='Names of files containing selectors separated with "+"')

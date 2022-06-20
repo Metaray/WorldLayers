@@ -1,27 +1,23 @@
-# Refactoring / new feature list:
-# - Fully update to blockstate-based system
-# - Compress results of old scanners (must keep select-by-id!)
-
 import os
 import uNBT as nbt
 import numpy as np
 import json
 import re
-from typing import Tuple, Optional, Dict
+from collections import defaultdict
+from typing import List, Tuple, Optional, Dict
 
 
-BlockState = Tuple[str, Optional[int]]
-BlockStateNew = Tuple[str, Optional[Dict[str, str]]]
+BlockState = Tuple[str, Optional[Dict[str, str]]]
 CompactState = str
-BlockMappingType = Dict[CompactState, int]
-BlockMappingInverseType = Dict[int, CompactState]
+BlockMapping = Dict[CompactState, int]
+BlockMappingInverse = Dict[int, CompactState]
 
 
 def resource_location(name: str) -> str:
     return os.path.join(os.path.dirname(__file__), name)
 
 
-def load_old_blockid_mapping() -> BlockMappingType:
+def load_old_blockid_mapping() -> BlockMapping:
     """Load static mapping for versions <1.13"""
     # Pretty sure ids didn't change since alpha (maybe even infdev)
     with open(resource_location('ids.json')) as id_file:
@@ -35,7 +31,7 @@ def load_old_blockid_mapping() -> BlockMappingType:
             mapping[name] = id
     return mapping
 
-def get_blockid_mapping(save_path: str) -> BlockMappingType:
+def get_blockid_mapping(save_path: str) -> BlockMapping:
     """Create mapping to and from symbolic block names"""
     try:
         root = nbt.read_nbt_file(os.path.join(save_path, 'level.dat'))
@@ -73,7 +69,7 @@ def _parse_cs_dict(s: str) -> Dict[str, str]:
         state[k.strip()] = v.strip()
     return state
 
-def parse_blockstate_name_new(bs_name: CompactState) -> BlockStateNew:
+def parse_blockstate_name(bs_name: CompactState) -> BlockState:
     """Parse things like "minecraft:thing[facing=south,burning=true]" """
     m = re.match(r'^(.+?)(\[(.*)\])?$', bs_name, re.ASCII)
     if not m:
@@ -87,37 +83,25 @@ def parse_blockstate_name_new(bs_name: CompactState) -> BlockStateNew:
         if not re.match(r'^[0-9a-zA-Z._/\-]+$', name):
             raise ValueError('Invalid blockstate name')
     
-    if m.group(3).isnumeric():
-        # Prettier interface for old metadata-based blockstates
-        # Example: minecraft:wool[3]
-        state = {BS_META: m.group(3)}
+    if m.group(2):
+        if m.group(3).isnumeric():
+            # Prettier interface for old metadata-based blockstates
+            # Example: minecraft:wool[3]
+            state = {BS_META: m.group(3)}
+        else:
+            state = _parse_cs_dict(m.group(3))
     else:
-        state = _parse_cs_dict(m.group(3)) if m.group(2) else None
+        state = None
     return name, state
 
-def format_blockstate_new(blockstate: BlockStateNew) -> CompactState:
+def format_blockstate(blockstate: BlockState) -> CompactState:
     name, data = blockstate
     if data is None:
         return name
     if BS_META in data:
         # Prettier formatting for old metadata-based blockstates
         return f'{name}[{data[BS_META]}]'
-    return f'{name}[{",".join(f"{k}={v}" for k, v in data.items())}]'
-
-
-def parse_blockstate_name(bs_name: CompactState) -> BlockState:
-    m = re.match(r'^([\w:]+)(\.(\d+))?$', bs_name, re.ASCII)
-    if not m:
-        raise ValueError('Invalid blockstate name')
-    meta = None
-    if m.group(3):
-        meta = int(m.group(3))
-    name = m.group(1)
-    return name, meta
-
-def format_blockstate(blockstate: BlockState) -> CompactState:
-    name, meta = blockstate
-    return f'{name}{f".{meta}" if meta is not None else ""}'
+    return f'{name}[{",".join(f"{k}={data[k]}" for k in sorted(data.keys()))}]'
 
 
 def parse_dashed_range(s: str) -> Tuple[int, int]:
@@ -134,15 +118,18 @@ class DimScanData:
     def __init__(self, 
                  histogram: np.ndarray, 
                  chunks_scanned: int, 
-                 blockstate_to_idx: BlockMappingType, 
+                 blockstate_to_idx: BlockMapping, 
                  base_y: int):
         self.histogram = histogram # [height][state]
         self.chunks_scanned = chunks_scanned
         self.blockstate_to_idx = blockstate_to_idx
         self.base_y = base_y
 
-        if self.state_count % 16 != 0:
-            raise ValueError('All IDs need 16 states')
+        self.name_to_blockstates: Dict[str, List[CompactState]] = defaultdict(list)
+        for blockstate in blockstate_to_idx.keys():
+            i = blockstate.find('[')
+            name = blockstate[:i] if i != -1 else blockstate
+            self.name_to_blockstates[name].append(blockstate)
 
     @property
     def height(self) -> int:
@@ -153,45 +140,42 @@ class DimScanData:
         return self.histogram.shape[1]
     
     @property
-    def idx_to_blockstate(self) -> BlockMappingInverseType:
-        backmap = {}
-        for state, idx in self.blockstate_to_idx.items():
-            backmap[idx] = state
-        return backmap
+    def idx_to_blockstate(self) -> BlockMappingInverse:
+        return {idx: state for state, idx in self.blockstate_to_idx.items()}
 
     def get_block_hist(self, blockstate: BlockState) -> np.ndarray:
-        # When `meta` is None - act as wildcard
-        name, meta = blockstate
+        # When `props` is None - act as wildcard
+        name, props = blockstate
         
-        id = None
+        # Support old system of directly choosing block ids
         if name.isnumeric():
-            # support old system of directly choosing block ids
-            id = int(name)
-        else:
-            if ':' not in name:
-                found = None
-                default = 'minecraft:' + name
-                if default in self.blockstate_to_idx:
-                    found = default
-                else:
-                    for fullname in self.blockstate_to_idx.keys():
-                        if fullname.endswith(':' + name):
-                            found = fullname
-                            break
-                if found:
-                    print(f'No namespace specified for {name}, using {found}')
-                    name = found
-            if name in self.blockstate_to_idx:
-                id = self.blockstate_to_idx[name]
+            return self.histogram[:, int(name)]
         
-        if id is None:
-            raise ValueError(f'Mapping {format_blockstate(blockstate)} not found')
-        bid = (id << 4) | ((meta or 0) & 15)
-
-        if meta is not None:
-            return self.histogram[:,bid]
-        else:
-            return self.histogram[:,bid:bid+16].sum(axis=1)
+        # Add default namespace if there is none
+        if ':' not in name:
+            name = 'minecraft:' + name
+        
+        if name in self.name_to_blockstates:
+            if props is not None:
+                sname = format_blockstate(blockstate)
+                if sname in self.blockstate_to_idx:
+                    idx = self.blockstate_to_idx[sname]
+                    return self.histogram[:, idx]
+            
+            else:
+                idxs = [
+                    self.blockstate_to_idx[sname]
+                    for sname in self.name_to_blockstates[name]
+                ]
+                return self.histogram[:, idxs].sum(axis=1)
+        
+        raise ValueError(f'Mapping {format_blockstate(blockstate)} not found')
+    
+    def try_get_block_hist(self, blockstate: BlockState) -> np.ndarray:
+        try:
+            return self.get_block_hist(blockstate)
+        except ValueError:
+            return np.zeros(self.height, dtype=self.histogram.dtype)
     
     def crop_histogram(self, bounds: Tuple[int, int]) -> None:
         """In-place cropping of histogram height bounds"""
@@ -210,6 +194,8 @@ class DimScanData:
 
 def load_scan(path: str) -> DimScanData:
     data = nbt.read_nbt_file(path)
+
+    version = data.get('Version', 3)
     
     chunks_scanned = data['ChunkCount'].value
     
@@ -240,6 +226,9 @@ def load_scan(path: str) -> DimScanData:
     blockstate_to_idx = {}
     for name, code in data['BlockMapping'].items():
         blockstate_to_idx[name] = code.value
+    
+    if version < 4:
+        block_counts, blockstate_to_idx = convert_to_new_bs_format(block_counts, blockstate_to_idx)
 
     print(f'Loaded data for {chunks_scanned} chunks, Y levels {base_y} ~ {base_y + HEI_LIM}')
     return DimScanData(
@@ -264,11 +253,12 @@ def save_scan_data(extract_file: str, scan_data: DimScanData) -> None:
                 for name, code in scan_data.blockstate_to_idx.items()
             }),
             'Data' : nbt.TagByteArray(scan_data.histogram.tobytes()),
+            'Version' : nbt.TagInt(4),
         })
     )
 
 
-def convert_to_new_bs_format(block_counts: np.ndarray, blockstate_to_idx: BlockMappingType) -> Tuple[np.ndarray, BlockMappingType]:
+def convert_to_new_bs_format(block_counts: np.ndarray, blockstate_to_idx: BlockMapping) -> Tuple[np.ndarray, BlockMapping]:
     state_count = block_counts.shape[1]
 
     # Keep air at 0
@@ -282,11 +272,13 @@ def convert_to_new_bs_format(block_counts: np.ndarray, blockstate_to_idx: BlockM
             nonzero_states.append(state_hist)
     block_counts = np.concatenate(nonzero_states, axis=1)
     
+    idx_to_bs = {v: k for k, v in blockstate_to_idx.items()}
+
     new_mapping = {}
     for new_sid, old_sid in enumerate(nonzero_sids):
         id = old_sid // 16
         meta = old_sid % 16
-        name = blockstate_to_idx[id]
+        name = idx_to_bs[id]
         blockstate = format_blockstate((name, {BS_META: str(meta)}))
         new_mapping[blockstate] = new_sid
 

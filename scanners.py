@@ -71,6 +71,8 @@ def scan_world_dimension(save_path: str, dim_id: int, scan_limit: int, bounds: T
     block_counts[:,:16] = 0
     block_counts[:,0] = layer_volume - block_counts[:,16:].sum(axis=1)
 
+    block_counts, blockstate_to_idx = convert_to_new_bs_format(block_counts, blockstate_to_idx)
+
     return DimScanData(
         histogram=block_counts,
         chunks_scanned=chunks_scanned,
@@ -82,13 +84,10 @@ def scan_world_dimension(save_path: str, dim_id: int, scan_limit: int, bounds: T
 M_OK_STATUSES = set(['light', 'spawn', 'heightmaps', 'full', 'fullchunk'])
 def scan_world_dimension_new(save_path: str, dim_id: int, scan_limit: int, bounds: Tuple[int, int]) -> DimScanData:
     """Scanner for versions 1.13+"""
+    save_properties = True
 
-    # Set some constant states for convinience
-    blockstate_to_idx = {
-        'minecraft:air': 0,
-        'minecraft:cave_air': 1,
-        'minecraft:void_air': 2,
-    }
+    # Set air index to zero for convinience
+    blockstate_to_idx = {'minecraft:air': 0}
     STATE_LIM = max(blockstate_to_idx.values()) + 1
     
     mn_sy = bounds[0] // 16
@@ -99,7 +98,6 @@ def scan_world_dimension_new(save_path: str, dim_id: int, scan_limit: int, bound
     block_counts = np.zeros((height_limit, STATE_LIM), CTR_DTYPE)
     ZERO_LAYER = np.zeros((height_limit, 1), CTR_DTYPE)
     index_map = np.zeros(16**3, np.uint32)
-    section_ids = np.zeros(16**3, np.uint16)
 
     for rfile_info in nbt.enumerate_world(save_path)[dim_id]:
         print('Scanning', rfile_info.path)
@@ -121,18 +119,21 @@ def scan_world_dimension_new(save_path: str, dim_id: int, scan_limit: int, bound
                 
                 for idx, block in enumerate(section['Palette']):
                     name = block['Name'].value
-                    # if 'Properties' in block:
-                    #     blockstate = (name, frozenset((k, v.value) for k, v in block['Properties'].items()))
-                    # else:
-                    #     blockstate = (name, frozenset())
+                    if save_properties and 'Properties' in block:
+                        # This must correctly keep in sync with `format_blockstate`
+                        props = [(k, v.value) for k, v in block['Properties'].items()]
+                        props.sort()
+                        props = ','.join(f'{k}={v}' for k, v in props)
+                        name = f'{name}[{props}]'
+                    
                     try:
                         bid = blockstate_to_idx[name]
                     except KeyError:
                         blockstate_to_idx[name] = bid = len(blockstate_to_idx)
                         block_counts = np.hstack((block_counts, ZERO_LAYER))
                     index_map[idx] = bid
-                # `idx` holds maximum index in palette
                 
+                # `idx` holds maximum index in palette here
                 # `BlockStates` is packed 16x16x16 array in YZX order
                 scan_v13_accel(
                     block_counts,
@@ -150,17 +151,9 @@ def scan_world_dimension_new(save_path: str, dim_id: int, scan_limit: int, bound
         if chunks_scanned >= scan_limit:
             break
     
-    # Adapter to old system with metadata
-    ID_LIM = len(blockstate_to_idx)
-    STATE_LIM = ID_LIM * 16
-    tmp = np.zeros((height_limit, STATE_LIM), CTR_DTYPE)
-    tmp[:,::16] = block_counts
-    block_counts = tmp
-    
     # Recalculate air block counts (may be lower because of empty chunk sections)
     layer_volume = chunks_scanned * 16**2
-    block_counts[:,:16] = 0
-    block_counts[:,0] = layer_volume - block_counts[:,16:].sum(axis=1)
+    block_counts[:,0] = layer_volume - block_counts[:,1:].sum(axis=1)
 
     return DimScanData(
         histogram=block_counts,
@@ -204,6 +197,8 @@ def scan_world_dimension_old(save_path: str, dim_id: int, scan_limit: int, bound
         if chunks_scanned >= scan_limit:
             break
     
+    block_counts, blockstate_to_idx = convert_to_new_bs_format(block_counts, blockstate_to_idx)
+
     return DimScanData(
         histogram=block_counts,
         chunks_scanned=chunks_scanned,
