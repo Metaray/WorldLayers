@@ -4,13 +4,17 @@ import numpy as np
 import json
 import re
 from collections import defaultdict
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Union
 
 
 BlockState = Tuple[str, Optional[Dict[str, str]]]
 CompactState = str
 BlockMapping = Dict[CompactState, int]
 BlockMappingInverse = Dict[int, CompactState]
+BlockSelector = Union[str, BlockState]
+
+
+AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
 
 
 def resource_location(name: str) -> str:
@@ -30,6 +34,7 @@ def load_old_blockid_mapping() -> BlockMapping:
             id = block_info['id']
             mapping[name] = id
     return mapping
+
 
 def get_blockid_mapping(save_path: str) -> BlockMapping:
     """Create mapping to and from symbolic block names"""
@@ -55,22 +60,26 @@ def get_blockid_mapping(save_path: str) -> BlockMapping:
     return mapping
 
 
-BS_META = '_'
+_OLD_META_PROPERTY = '_'
+
 def _parse_cs_dict(s: str) -> Dict[str, str]:
     """Parse comma separated key=value dict"""
     s = s.strip()
     if not s:
         return {}
-    if s.isnumeric():
-        return {BS_META: s}
     state = {}
     for kv in s.split(','):
         k, v = kv.split('=')
         state[k.strip()] = v.strip()
     return state
 
-def parse_blockstate_name(bs_name: CompactState) -> BlockState:
-    """Parse things like "minecraft:thing[facing=south,burning=true]" """
+
+def parse_blockstate(bs_name: CompactState) -> BlockState:
+    """Parse compact blockstate representation:
+        namespace:something
+        minecraft:thing[facing=south,burning=true]
+        old_style:name_with_metadata[123]
+    """
     m = re.match(r'^(.+?)(\[(.*)\])?$', bs_name, re.ASCII)
     if not m:
         raise ValueError('Invalid blockstate')
@@ -85,22 +94,20 @@ def parse_blockstate_name(bs_name: CompactState) -> BlockState:
     
     if m.group(2):
         if m.group(3).isnumeric():
-            # Prettier interface for old metadata-based blockstates
-            # Example: minecraft:wool[3]
-            state = {BS_META: m.group(3)}
+            state = {_OLD_META_PROPERTY: m.group(3)}
         else:
             state = _parse_cs_dict(m.group(3))
     else:
         state = None
     return name, state
 
-def format_blockstate(blockstate: BlockState) -> CompactState:
+
+def serialize_blockstate(blockstate: BlockState) -> CompactState:
     name, data = blockstate
     if data is None:
         return name
-    if BS_META in data:
-        # Prettier formatting for old metadata-based blockstates
-        return f'{name}[{data[BS_META]}]'
+    if _OLD_META_PROPERTY in data:
+        return f'{name}[{data[_OLD_META_PROPERTY]}]'
     return f'{name}[{",".join(f"{k}={data[k]}" for k in sorted(data.keys()))}]'
 
 
@@ -115,11 +122,13 @@ def parse_dashed_range(s: str) -> Tuple[int, int]:
 class DimScanData:
     """Class holding collected data and (useful) parameters of a scan"""
 
-    def __init__(self, 
-                 histogram: np.ndarray, 
-                 chunks_scanned: int, 
-                 blockstate_to_idx: BlockMapping, 
-                 base_y: int):
+    def __init__(
+        self,
+        histogram: np.ndarray,
+        chunks_scanned: int,
+        blockstate_to_idx: BlockMapping,
+        base_y: int
+    ):
         self.histogram = histogram # [height][state]
         self.chunks_scanned = chunks_scanned
         self.blockstate_to_idx = blockstate_to_idx
@@ -130,6 +139,9 @@ class DimScanData:
             i = blockstate.find('[')
             name = blockstate[:i] if i != -1 else blockstate
             self.name_to_blockstates[name].append(blockstate)
+    
+    def copy(self) -> 'DimScanData':
+        return DimScanData(self.histogram, self.chunks_scanned, self.blockstate_to_idx, self.base_y)
 
     @property
     def height(self) -> int:
@@ -143,53 +155,72 @@ class DimScanData:
     def idx_to_blockstate(self) -> BlockMappingInverse:
         return {idx: state for state, idx in self.blockstate_to_idx.items()}
 
-    def get_block_hist(self, blockstate: BlockState) -> np.ndarray:
-        # When `props` is None - act as wildcard
+
+def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> np.ndarray:
+    if isinstance(blockstate, tuple):
         name, props = blockstate
-        
-        # Support old system of directly choosing block ids
-        if name.isnumeric():
-            return self.histogram[:, int(name)]
-        
-        # Add default namespace if there is none
-        if ':' not in name:
-            name = 'minecraft:' + name
-        
-        if name in self.name_to_blockstates:
-            if props is not None:
-                sname = format_blockstate(blockstate)
-                if sname in self.blockstate_to_idx:
-                    idx = self.blockstate_to_idx[sname]
-                    return self.histogram[:, idx]
-            
-            else:
-                idxs = [
-                    self.blockstate_to_idx[sname]
-                    for sname in self.name_to_blockstates[name]
-                ]
-                return self.histogram[:, idxs].sum(axis=1)
-        
-        raise ValueError(f'Mapping {format_blockstate(blockstate)} not found')
+    else:
+        name, props = blockstate, None
     
-    def try_get_block_hist(self, blockstate: BlockState) -> np.ndarray:
+    # Support old system of directly choosing block ids
+    if name.isnumeric():
+        return scan.histogram[:, int(name)]
+    
+    # Add default namespace if there is none
+    if ':' not in name:
+        name = 'minecraft:' + name
+    
+    if name in scan.name_to_blockstates:
+        if props is not None:
+            sname = serialize_blockstate(blockstate)
+            if sname in scan.blockstate_to_idx:
+                idx = scan.blockstate_to_idx[sname]
+                return scan.histogram[:, idx]
+        
+        else:
+            idxs = [
+                scan.blockstate_to_idx[sname]
+                for sname in scan.name_to_blockstates[name]
+            ]
+            return scan.histogram[:, idxs].sum(axis=1)
+    
+    raise ValueError(f'Mapping {serialize_blockstate(blockstate)} not found')
+
+
+def try_get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> np.ndarray:
+    try:
+        return get_block_hist(scan, blockstate)
+    except ValueError:
+        return np.zeros(scan.height, dtype=scan.histogram.dtype)
+
+
+def sum_blocks_selection(scan: DimScanData, selectors: List[BlockSelector]) -> np.ndarray:
+    found_any = False
+    hist = np.zeros(scan.height, scan.histogram.dtype)
+    for selector in selectors:
         try:
-            return self.get_block_hist(blockstate)
+            hist += get_block_hist(scan, selector)
+            found_any = True
         except ValueError:
-            return np.zeros(self.height, dtype=self.histogram.dtype)
+            pass
+    if not found_any:
+        raise ValueError
+    return hist
+
+
+def crop_histogram(scan: DimScanData, bounds: Tuple[int, int]) -> None:
+    """In-place cropping of histogram height bounds"""
+    y_low, y_hi = bounds
+    new_hei = y_hi - y_low
+    if y_low >= y_hi:
+        raise ValueError('Invalid cropping range')
+    if y_low < scan.base_y or new_hei > scan.height:
+        raise ValueError('Cropping range doesn\'t match available data')
     
-    def crop_histogram(self, bounds: Tuple[int, int]) -> None:
-        """In-place cropping of histogram height bounds"""
-        y_low, y_hi = bounds
-        new_hei = y_hi - y_low
-        if y_low >= y_hi:
-            raise ValueError('Invalid cropping range')
-        if y_low < self.base_y or new_hei > self.height:
-            raise ValueError('Cropping range doesn\'t match available data')
-        
-        if y_low == self.base_y and new_hei == self.height:
-            return
-        self.histogram = self.histogram[y_low-self.base_y:y_hi-self.base_y]
-        self.base_y = y_low
+    if y_low == scan.base_y and new_hei == scan.height:
+        return
+    scan.histogram = scan.histogram[y_low-scan.base_y:y_hi-scan.base_y]
+    scan.base_y = y_low
 
 
 def load_scan(path: str) -> DimScanData:
@@ -235,7 +266,7 @@ def load_scan(path: str) -> DimScanData:
         histogram=block_counts,
         chunks_scanned=chunks_scanned,
         blockstate_to_idx=blockstate_to_idx,
-        base_y=base_y
+        base_y=base_y,
     )
 
 
@@ -243,17 +274,17 @@ def save_scan_data(extract_file: str, scan_data: DimScanData) -> None:
     nbt.write_nbt_file(
         extract_file,
         nbt.TagCompound({
-            'ChunkCount' : nbt.TagLong(scan_data.chunks_scanned),
-            'StateCount' : nbt.TagInt(scan_data.state_count),
-            'ScanHeight' : nbt.TagInt(scan_data.height),
-            'BaseY' : nbt.TagInt(scan_data.base_y),
-            'DataType' : nbt.TagString(scan_data.histogram.dtype.name),
-            'BlockMapping' : nbt.TagCompound({
-                name : nbt.TagInt(code)
+            'Version': nbt.TagInt(4),
+            'ChunkCount': nbt.TagLong(scan_data.chunks_scanned),
+            'StateCount': nbt.TagInt(scan_data.state_count),
+            'ScanHeight': nbt.TagInt(scan_data.height),
+            'BaseY': nbt.TagInt(scan_data.base_y),
+            'DataType': nbt.TagString(scan_data.histogram.dtype.name),
+            'BlockMapping': nbt.TagCompound({
+                name: nbt.TagInt(code)
                 for name, code in scan_data.blockstate_to_idx.items()
             }),
-            'Data' : nbt.TagByteArray(scan_data.histogram.tobytes()),
-            'Version' : nbt.TagInt(4),
+            'Data': nbt.TagByteArray(scan_data.histogram.tobytes()),
         })
     )
 
@@ -262,7 +293,7 @@ def convert_to_new_bs_format(block_counts: np.ndarray, blockstate_to_idx: BlockM
     state_count = block_counts.shape[1]
 
     # Keep air at 0
-    # Discard mappings for blocks which weren't found
+    # Discard mappings for blocks with nonzero count
     nonzero_sids = []
     nonzero_states = []
     for sid in range(state_count):
@@ -279,7 +310,7 @@ def convert_to_new_bs_format(block_counts: np.ndarray, blockstate_to_idx: BlockM
         id = old_sid // 16
         meta = old_sid % 16
         name = idx_to_bs[id]
-        blockstate = format_blockstate((name, {BS_META: str(meta)}))
+        blockstate = serialize_blockstate((name, {_OLD_META_PROPERTY: str(meta)}))
         new_mapping[blockstate] = new_sid
 
     return block_counts, new_mapping

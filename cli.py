@@ -9,9 +9,6 @@ class InvalidScannerOperation(Exception):
     pass
 
 
-AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
-
-
 def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
     extract_file = args.output
     save_scan_data(extract_file, scan_data)
@@ -19,13 +16,11 @@ def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
 
 def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
-    block_counts = scan_data.histogram
     chunks_scanned = scan_data.chunks_scanned
     idx_to_blockstate = scan_data.idx_to_blockstate
-    HEI_LIM = scan_data.height
     
-    totals = block_counts.sum(axis=0)
-    volume = chunks_scanned * (HEI_LIM * 16**2)
+    totals = scan_data.histogram.sum(axis=0)
+    volume = chunks_scanned * scan_data.height * 16**2
 
     def show_count(name: str, count: int) -> None:
         print(
@@ -45,7 +40,7 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
     
     print(f'{scan_data.state_count} block states')
 
-    airsum = sum(scan_data.try_get_block_hist((name, None)) for name in AIR_BLOCKS).sum()
+    airsum = sum_blocks_selection(scan_data, AIR_BLOCKS).sum()
     show_count('Nonair blocks', totals.sum() - airsum)
 
     for _, total, name in visdata:
@@ -55,13 +50,15 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
 class DisplayBlockSelector(NamedTuple):
     # Blockstate selector
     # '+' separated list of CompactState
-    names: str
+    selectors: str
     # Matplotlib colors / None for auto color
     color: Optional[str]
     # Legend name override / None - equal to `names`
     display_name: Optional[str]
 
+
 def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
+    # Parse CSV of `DisplayBlockSelector` fields
     blocks_shown = []
     for line in map(str.strip, selectors):
         if not line or line.startswith('#'):
@@ -73,23 +70,24 @@ def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
         
         # Test for selector correctness
         for name in parts[0].split('+'):
-            parse_blockstate_name(name)
+            parse_blockstate(name)
 
         blocks_shown.append(DisplayBlockSelector(
-            names=parts[0],
+            selectors=parts[0],
             color=parts[1] if parts[1] else None,
             display_name=parts[2] if parts[2] else None,
         ))
     return blocks_shown
 
+
 def load_block_selection(files: str) -> List[DisplayBlockSelector]:
     lines = []
     for part in files.split(';'):
-        if os.path.exists(part):
+        if os.path.isfile(part):
             with open(part) as f:
                 lines.extend(f.readlines())
         else:
-            lines.append(part) # treat non-files as seletors for convinience
+            lines.append(part)  # treat non-files as seletors for convinience
     return parse_block_selection(lines)
 
 
@@ -99,83 +97,81 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
     import numpy as np
     
     if args.layers:
-        scan_data.crop_histogram(args.layers)
-    block_counts = scan_data.histogram
+        crop_histogram(scan_data, args.layers)
     chunks_scanned = scan_data.chunks_scanned
-    HEI_LIM = scan_data.height
+    height = scan_data.height
 
     show_total_nonair = args.solids
     cumulative = args.cumulative
-    dump_csv = args.dumpcsv # TODO: do textual data output properly
+    if show_total_nonair and cumulative:
+        print('Warning: ignoring flag "solids" because "cumulative" is set')
+        show_total_nonair = False
+    dump_csv = args.dumpcsv  # TODO: do textual data output properly
 
     blocks_shown = load_block_selection(args.select)
 
     if args.norm == 'base':
-        # Normalize by base block - relative fraction
-        normalize_base = parse_blockstate_name('minecraft:stone')  # TODO: make this configurable
-        base_mx = np.maximum(scan_data.get_block_hist(normalize_base), 1)
-        norm_func = lambda x: x / base_mx
-        y_label = f'Fraction relative to {format_blockstate(normalize_base)}'
+        normalize_base = parse_blockstate('minecraft:stone')  # TODO: make this configurable
+        y_label = f'Fraction relative to {serialize_blockstate(normalize_base)}'
+        base_mx = np.maximum(get_block_hist(scan_data, normalize_base), 1)
+        def norm_func(x: np.ndarray) -> np.ndarray:
+            return x / base_mx
+    
     elif args.norm == 'total':
-        # Normalize by total volume - chance per block
-        norm_func = lambda x: x / (16**2 * chunks_scanned)
         y_label = 'Fraction per block'
+        def norm_func(x: np.ndarray) -> np.ndarray:
+            return x / (16**2 * chunks_scanned)
+    
     elif args.norm == 'chunk':
-        # Normalize by number of chunks - blocks per chunk layer
-        norm_func = lambda x: x / chunks_scanned
         y_label = 'Blocks per chunk layer'
-    elif args.norm == 'none':
-        norm_func = lambda x: x
-        y_label = 'Total count per layer'
+        def norm_func(x: np.ndarray) -> np.ndarray:
+            return x / chunks_scanned
+    
     else:
-        raise InvalidScannerOperation('Invalid normalization mode')
+        y_label = 'Total count per layer'
+        def norm_func(x: np.ndarray) -> np.ndarray:
+            return x
 
     if cumulative:
         # TODO: Use plt.stackplot()
         blocks_shown.reverse()
-        acc = np.zeros(HEI_LIM, np.float64)
+        hist_accum = np.zeros(height, np.float64)
     
     fig, ax = plt.subplots(figsize=(8, 5))
 
     graphs = []
     base_y = scan_data.base_y
-    y_range = list(range(base_y, base_y + HEI_LIM))
+    y_range = list(range(base_y, base_y + height))
     
     for show_info in blocks_shown:
         color = show_info.color
-        disp_name = show_info.display_name or show_info.names
+        display_name = show_info.display_name or show_info.selectors
 
-        hist = np.zeros(HEI_LIM, dtype=CTR_DTYPE)
-        found_any = False
-        for bs_name in show_info.names.split('+'):
-            try:
-                hist += scan_data.get_block_hist(parse_blockstate_name(bs_name))
-                found_any = True
-            except ValueError:
-                pass  # Ignore blocks we don't have / have invalid selector
-        
-        if found_any:
-            print(f'{disp_name} = {hist.sum()} blocks')
-        else:
-            print(f'Found no blocks matching selector: {show_info.names}')
+        try:
+            hist = sum_blocks_selection(scan_data, map(parse_blockstate, show_info.selectors.split('+')))
+            print(f'{display_name} = {hist.sum()} blocks')
+        except ValueError:
+            print(f'Found no blocks matching selectors: {show_info.selectors}')
+            hist = np.zeros(height, dtype=CTR_DTYPE)
         
         hist = norm_func(hist)
         if not cumulative:
             graph = hist
         else:
-            acc += hist
-            graph = acc
+            hist_accum += hist
+            graph = hist_accum
         
         if dump_csv:
-            graphs.append((graph, disp_name))
+            graphs.append((graph, display_name))
         
         if color:
-            ax.plot(y_range, graph, color, label=disp_name)
+            ax.plot(y_range, graph, color, label=display_name)
         else:
-            ax.plot(y_range, graph, label=disp_name)
+            ax.plot(y_range, graph, label=display_name)
 
-    if show_total_nonair and not cumulative:
-        graph = norm_func(block_counts[:,1:].sum(axis=1))
+    if show_total_nonair:
+        nonair_hist = (chunks_scanned * 16**2) - sum_blocks_selection(scan_data, AIR_BLOCKS)
+        graph = norm_func(nonair_hist)
         ax.plot(y_range, graph, 'lightgray', label='Non-air')
         if dump_csv:
             graphs.append((graph, 'Non-air'))
@@ -215,7 +211,7 @@ def operation_load_and_process(args: argparse.Namespace) -> None:
     
     # Save new histogram even if it isn't a goal
     if args.action == 'extract' and args.vismode != 'save':
-        t = threading.Thread(target=save_scan_data, args=('.last_scan.dat', scan_data))
+        t = threading.Thread(target=save_scan_data, args=('.last_scan.dat', scan_data.copy()))
         t.start()
 
     if args.vismode == 'print':
