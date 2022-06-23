@@ -97,19 +97,12 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
     
     if args.layers:
         crop_histogram(scan_data, args.layers)
+
     chunks_scanned = scan_data.chunks_scanned
-    height = scan_data.height
-
-    show_total_nonair = args.solids
-    cumulative = args.cumulative
-    if show_total_nonair and cumulative:
-        print('Warning: ignoring flag "solids" because "cumulative" is set')
-        show_total_nonair = False
-
     blocks_shown = load_block_selection(args.select)
 
     if args.norm == 'base':
-        normalize_base = parse_blockstate('minecraft:stone')  # TODO: make this configurable
+        normalize_base = parse_blockstate(args.normbase)
         y_label = f'Fraction relative to {serialize_blockstate(normalize_base)}'
         base_mx = np.maximum(get_block_hist(scan_data, normalize_base), 1)
         def norm_func(x: np.ndarray) -> np.ndarray:
@@ -130,18 +123,19 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
         def norm_func(x: np.ndarray) -> np.ndarray:
             return x
 
-    if cumulative:
-        # TODO: Use plt.stackplot()
-        blocks_shown.reverse()
-        hist_accum = np.zeros(height, np.float64)
+    class GraphData(NamedTuple):
+        counts: np.ndarray
+        color: Optional[str]
+        label: str
     
     fig, ax = plt.subplots(figsize=(8, 5))
 
     base_y = scan_data.base_y
+    height = scan_data.height
     y_range = list(range(base_y, base_y + height))
+    graphs: List[GraphData] = []
     
     for show_info in blocks_shown:
-        color = show_info.color
         display_name = show_info.display_name or show_info.selectors
 
         try:
@@ -152,22 +146,28 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
             hist = np.zeros(height, dtype=CTR_DTYPE)
         
         hist = norm_func(hist)
-        if not cumulative:
-            graph = hist
-        else:
-            hist_accum += hist
-            graph = hist_accum
-        
-        if color:
-            ax.plot(y_range, graph, color, label=display_name)
-        else:
-            ax.plot(y_range, graph, label=display_name)
+        graphs.append(GraphData(
+            counts=hist,
+            color=show_info.color,
+            label=display_name,
+        ))
 
-    if show_total_nonair:
+    if not args.cumulative:
+        for graph in graphs:
+            ax.plot(y_range, graph.counts, color=graph.color, label=graph.label)
+    else:
+        ax.stackplot(
+            y_range,
+            [g.counts for g in graphs],
+            colors=[g.color for g in graphs],
+            labels=[g.label for g in graphs],
+        )
+
+    if args.solids:
         nonair_hist = (chunks_scanned * 16**2) - sum_blocks_selection(scan_data, AIR_BLOCKS)
         graph = norm_func(nonair_hist)
-        ax.plot(y_range, graph, 'lightgray', label='Non-air')
-
+        ax.plot(y_range, graph, color='lightgray', label='Non-air')
+    
     ax.grid(True)
     ax.legend()
     ax.set_title('Block distribution by height')
@@ -265,7 +265,8 @@ def main():
         
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
         parse_vis_plot.add_argument('select', help='Names of files containing selectors separated with ";"')
-        parse_vis_plot.add_argument('--norm', choices=['none', 'base', 'total', 'chunk'], default='total', help='Block counts ordering')
+        parse_vis_plot.add_argument('--norm', choices=['none', 'base', 'total', 'chunk'], default='total', help='Block count normalization')
+        parse_vis_plot.add_argument('--normbase', default='minecraft:stone', help='When --norm=base normalize relative to this block')
         parse_vis_plot.add_argument('--solids', action='store_true', help='Display plot for non-air blocks')
         parse_vis_plot.add_argument('--cumulative', action='store_true', help='Display as cumulative graph')
         parse_vis_plot.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to display')
