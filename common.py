@@ -226,7 +226,10 @@ def crop_histogram(scan: DimScanData, bounds: Tuple[int, int]) -> None:
 def load_scan(path: str) -> DimScanData:
     data = nbt.read_nbt_file(path)
 
-    version = data.get('Version', 3)
+    if 'Version' in data:
+        version = data['Version'].value
+    else:
+        version = 3
     
     chunks_scanned = data['ChunkCount'].value
     

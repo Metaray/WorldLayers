@@ -114,20 +114,29 @@ def scan_world_dimension_new(
         print('Scanning', rfile_info.path)
         region = nbt.Region.from_file(rfile_info.path)
         for chunk in region.iter_nonempty():
-            has_carry = chunk.nbt['DataVersion'].value < 2534  # versions <20w19a (pre 1.16)
-            level_data = chunk.nbt['Level']
+            data_version = chunk.nbt['DataVersion'].value
+            level_data = chunk.nbt['Level'] if data_version < 2844 else chunk.nbt
             if level_data['Status'].value not in STATUSES_READY:
                 continue
             
-            for section in level_data['Sections']:
+            has_carry = data_version < 2534
+            for section in level_data['Sections' if data_version < 2844 else 'sections']:
                 section_y = section['Y'].value
                 if not (min_section <= section_y < max_section):
                     continue
                 
-                if 'Palette' not in section:  # or 'BlockStates' not in section:
-                    continue
+                if data_version < 2836:
+                    if 'Palette' not in section:
+                        continue
+                    states = section['BlockStates'].value
+                    palette = section['Palette']
+                else:
+                    if 'data' not in section['block_states']:
+                        continue
+                    states = section['block_states']['data'].value
+                    palette = section['block_states']['palette']
                 
-                for idx, block in enumerate(section['Palette']):
+                for idx, block in enumerate(palette):
                     name = block['Name'].value
                     if save_properties and 'Properties' in block:
                         # This must correctly keep in sync with `serialize_blockstate()`
@@ -149,7 +158,7 @@ def scan_world_dimension_new(
                     block_counts,
                     block_counts.shape[1],
                     section_y - min_section,
-                    np.array(section['BlockStates'].value, np.uint64),
+                    np.array(states, np.int64),
                     index_map,
                     idx,
                     has_carry,
