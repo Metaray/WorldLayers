@@ -143,7 +143,7 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
             print(f'{display_name} = {hist.sum()} blocks')
         except ValueError:
             print(f'Found no blocks matching selectors: {show_info.selectors}')
-            hist = np.zeros(height, dtype=CTR_DTYPE)
+            hist = scan_data.zero_histogram
         
         hist = norm_func(hist)
         graphs.append(GraphData(

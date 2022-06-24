@@ -7,7 +7,7 @@ from time import perf_counter as clock
 from common import *
 from accelerators import *
 
-CTR_DTYPE = np.int64 # Histogram counter type
+_CTR_DTYPE = np.int64 # Histogram counter type
 
 
 def scan_world_dimension(
@@ -39,7 +39,7 @@ def scan_world_dimension(
 
     chunks_scanned = 0
     ZERO_ADD = np.zeros(16**3, np.uint8)  # Filler for missing 'Add' or 'Add2'
-    block_counts = np.zeros((height_limit, STATE_LIM), CTR_DTYPE)
+    block_counts = np.zeros((height_limit, STATE_LIM), _CTR_DTYPE)
 
     for rfile_info in nbt.enumerate_world(save_path)[dim_id]:
         print('Scanning', rfile_info.path)
@@ -76,13 +76,14 @@ def scan_world_dimension(
     block_counts[:, :16] = 0
     block_counts[:, 0] = layer_volume - block_counts[:, 16:].sum(axis=1)
 
-    block_counts, blockstate_to_idx = convert_to_new_bs_format(block_counts, blockstate_to_idx)
+    block_counts, blockstate_to_idx, old_to_new = convert_to_new_bs_format(block_counts, blockstate_to_idx)
 
     return DimScanData(
         histogram=block_counts,
         chunks_scanned=chunks_scanned,
         blockstate_to_idx=blockstate_to_idx,
         base_y=min_section * 16,
+        old_to_new=old_to_new,
     )
 
 
@@ -106,8 +107,8 @@ def scan_world_dimension_new(
     height_limit = (max_section - min_section) * 16
     
     chunks_scanned = 0
-    block_counts = np.zeros((height_limit, STATE_LIM), CTR_DTYPE)
-    ZERO_LAYER = np.zeros((height_limit, 1), CTR_DTYPE)
+    block_counts = np.zeros((height_limit, STATE_LIM), _CTR_DTYPE)
+    ZERO_LAYER = np.zeros((height_limit, 1), _CTR_DTYPE)
     index_map = np.zeros(16**3, np.uint32)
 
     for rfile_info in nbt.enumerate_world(save_path)[dim_id]:
@@ -198,7 +199,7 @@ def scan_world_dimension_old(
 
     blockstate_to_idx = load_old_blockid_mapping()
     chunks_scanned = 0
-    block_counts = np.zeros((MAX_HEIGHT, STATE_LIM), CTR_DTYPE)
+    block_counts = np.zeros((MAX_HEIGHT, STATE_LIM), _CTR_DTYPE)
 
     for rfile_info in nbt.enumerate_world(save_path, 'region')[dim_id]:
         print('Scanning', rfile_info.path)
@@ -221,13 +222,14 @@ def scan_world_dimension_old(
         if chunks_scanned >= scan_limit:
             break
     
-    block_counts, blockstate_to_idx = convert_to_new_bs_format(block_counts, blockstate_to_idx)
+    block_counts, blockstate_to_idx, old_to_new = convert_to_new_bs_format(block_counts, blockstate_to_idx)
 
     return DimScanData(
         histogram=block_counts,
         chunks_scanned=chunks_scanned,
         blockstate_to_idx=blockstate_to_idx,
         base_y=0,
+        old_to_new=old_to_new,
     )
 
 
