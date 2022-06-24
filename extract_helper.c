@@ -14,16 +14,16 @@ EXPORTED_API void dsci_v0(
     const size_t idLim = 256 * 16;
 
     for (size_t xz = 0; xz < 16 * 16; ++xz) {
-        for (size_t y = 0; y < (128 / 2); ++y) {
-            size_t idx = y + xz * (128 / 2);
+        for (size_t y = 0; y < 128; y += 2) {
+            size_t idx = y + xz * 128;
             
-            uint32_t bid1 = ((uint32_t)blocks[idx * 2 + 0] << 4)
-                          | NIBBLE_LO(metadata[idx]);
+            uint32_t bid1 = ((uint32_t)blocks[idx + 0] << 4)
+                          | NIBBLE_LO(metadata[idx / 2]);
             
-            uint32_t bid2 = ((uint32_t)blocks[idx * 2 + 1] << 4)
-                          | NIBBLE_HI(metadata[idx]);
+            uint32_t bid2 = ((uint32_t)blocks[idx + 1] << 4)
+                          | NIBBLE_HI(metadata[idx / 2]);
             
-            blockCount[y * idLim + bid1]++;
+            blockCount[(y + 0) * idLim + bid1]++;
             blockCount[(y + 1) * idLim + bid2]++;
         }
     }
