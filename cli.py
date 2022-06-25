@@ -1,5 +1,6 @@
 import argparse
 import threading
+import csv
 from typing import List, NamedTuple, Optional
 from scanners import *
 
@@ -57,13 +58,15 @@ class DisplayBlockSelector(NamedTuple):
 
 
 def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
-    # Parse CSV of `DisplayBlockSelector` fields
+    '''Parse a list of display selectors
+
+    Display selector is a CSV tuple of:
+    1. Blockstate name (see `parse_blockstate()`)
+    2. Matplotlib color to plot as (optional)
+    3. Graph legend name (optional)
+    '''
     blocks_shown = []
-    for line in map(str.strip, selectors):
-        if not line or line.startswith('#'):
-            continue
-        
-        parts = line.split(',')
+    for parts in csv.reader(selectors):
         while len(parts) < 3:
             parts.append('')
         
@@ -79,15 +82,25 @@ def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
     return blocks_shown
 
 
-def load_block_selection(files: str) -> List[DisplayBlockSelector]:
-    lines = []
-    for part in files.split(';'):
-        if os.path.isfile(part):
-            with open(part) as f:
-                lines.extend(f.readlines())
+def load_block_selection(selection: str) -> List[DisplayBlockSelector]:
+    '''Parse block selection argument from command line
+
+    Each selection may be:
+    - Display selector (see `parse_block_selection()`)
+    - Name of a file, prepended with "@", containing lines of display selectors.
+      File can contain comments statring with "#".
+    '''
+    selectors = []
+    for part in selection:
+        if part.startswith('@'):
+            with open(part[1:]) as f:
+                lines = f.readlines()
+            lines = map(str.strip, lines)
+            lines = filter(lambda s: s and not s.startswith('#'), lines)
+            selectors.extend(lines)
         else:
-            lines.append(part)  # treat non-files as seletors for convinience
-    return parse_block_selection(lines)
+            selectors.append(part)
+    return parse_block_selection(selectors)
 
 
 def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
@@ -186,7 +199,7 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
     if args.layers:
         crop_histogram(scan_data, args.layers)
 
-    if args.select == '*':
+    if '*' in args.select:
         blocks_shown = None
     else:
         blocks_shown = load_block_selection(args.select)
@@ -264,7 +277,7 @@ def main():
         parse_vis_print.add_argument('--sort', choices=['id', 'count', 'name'], default='count', help='Block counts ordering')
         
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
-        parse_vis_plot.add_argument('select', help='Names of files containing selectors separated with ";"')
+        parse_vis_plot.add_argument('select', nargs='+', help='Selectors or names of files containing selectors')
         parse_vis_plot.add_argument('--norm', choices=['none', 'base', 'total', 'chunk'], default='total', help='Block count normalization')
         parse_vis_plot.add_argument('--normbase', default='minecraft:stone', help='When --norm=base normalize relative to this block')
         parse_vis_plot.add_argument('--solids', action='store_true', help='Display plot for non-air blocks')
@@ -273,7 +286,7 @@ def main():
         parse_vis_plot.add_argument('--savefig', default=None, help='Save plot to file instead of displaying in a window')
 
         parse_vis_csv = subparsers.add_parser('csv', help='Print selected block histograms as CSV')
-        parse_vis_csv.add_argument('select', help='Names of files containing selectors separated with ";" (use "*" to print everything)')
+        parse_vis_csv.add_argument('select', nargs='+', help='Selectors or names of files containing selectors (use "*" to output everything)')
         parse_vis_csv.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to use')
         parse_vis_csv.add_argument('--bylayer', action='store_true', help='Print counts for each Y layer on a separate line')
         parse_vis_csv.add_argument('--showy', action='store_true', help='Add Y level column to CSV')

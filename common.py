@@ -75,10 +75,13 @@ def _parse_cs_dict(s: str) -> Dict[str, str]:
 
 
 def parse_blockstate(bs_name: CompactState) -> BlockState:
-    """Parse compact blockstate representation:
-        namespace:something
-        minecraft:thing[facing=south,burning=true]
-        old_style:name_with_metadata[123]
+    """Parse compact blockstate representation
+
+    Examples:
+    - namespace:something
+    - minecraft:thing[facing=south,waterlogged=true]
+    - old_style_name_with_metadata[123]
+    - 240[1]
     """
     m = re.match(r'^(.+?)(\[(.*)\])?$', bs_name, re.ASCII)
     if not m:
