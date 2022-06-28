@@ -17,11 +17,29 @@ def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
 def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
     chunks_scanned = scan_data.chunks_scanned
-    idx_to_blockstate = scan_data.idx_to_blockstate
-    
     totals = scan_data.histogram.sum(axis=0)
     volume = chunks_scanned * scan_data.height * 16**2
 
+    if args.sumstates:
+        visdata = [
+            (
+                None,
+                sum(totals[scan_data.blockstate_to_idx[state]] for state in states),
+                name,
+            )
+            for name, states in scan_data.name_to_blockstates.items()
+        ]
+    else:
+        idx_to_blockstate = scan_data.idx_to_blockstate
+        visdata = [(i, totals[i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
+
+    if args.sort == 'count':
+        visdata.sort(key=lambda ci: -ci[1])  # sort by block count descending
+    elif args.sort == 'name':
+        visdata.sort(key=lambda ci: ci[2])  # sort by blockstate lexicographically
+    else:
+        visdata.sort(key=lambda ci: ci[0])  # sort by state id ascending (legacy)
+    
     def show_count(name: str, count: int) -> None:
         print(
             f'{name} = {count}',
@@ -30,14 +48,7 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
             sep='\t'
         )
 
-    visdata = [(i, totals[i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
-    if args.sort == 'count':
-        visdata.sort(key=lambda ci: -ci[1])  # sort by block count descending
-    elif args.sort == 'name':
-        visdata.sort(key=lambda ci: ci[2])  # sort by blockstate lexicographically
-    else:
-        visdata.sort(key=lambda ci: ci[0])  # sort by state id ascending (legacy)
-    
+    print(f'{len(scan_data.name_to_blockstates)} unique blocks')
     print(f'{scan_data.state_count} block states')
 
     airsum = sum_blocks_selection(scan_data, AIR_BLOCKS).sum()
@@ -186,7 +197,8 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
     ax.set_title('Block distribution by height')
     ax.set_xlabel('Y level')
     ax.set_ylabel(y_label)
-    ax.xaxis.set_major_locator(MaxNLocator(nbins='auto', steps=[1, 5], integer=True, min_n_ticks=7))
+    ax.set_xlim(y_range[0], y_range[-1])
+    ax.xaxis.set_major_locator(MaxNLocator(nbins='auto', steps=[1, 2, 4, 8], integer=True, min_n_ticks=7))
     
     if args.savefig:
         # plt.ylim(0.0, 0.01)
@@ -275,6 +287,7 @@ def main():
         
         parse_vis_print = subparsers.add_parser('print', help='Print total block counts')
         parse_vis_print.add_argument('--sort', choices=['id', 'count', 'name'], default='count', help='Block counts ordering')
+        parse_vis_print.add_argument('--sumstates', action='store_true', help='Sum counts of different block states into one')
         
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
         parse_vis_plot.add_argument('select', nargs='+', help='Selectors or names of files containing selectors')
