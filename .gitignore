@@ -3,6 +3,7 @@
 *.png
 !/images/**
 *.dll
+*.so
 *.txt
 
 # Byte-compiled / optimized / DLL files

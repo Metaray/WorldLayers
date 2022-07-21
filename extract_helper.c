@@ -1,6 +1,11 @@
 #include <stdint.h>
+#include <stddef.h>
 
-#define EXPORTED_API __declspec(dllexport)
+#if defined(_WIN32)
+  #define EXPORTED_API __declspec(dllexport)
+#else
+  #define EXPORTED_API
+#endif
 
 #define NIBBLE_LO(x) ((uint32_t)((x) & 0xf))
 #define NIBBLE_HI(x) ((uint32_t)(((x) >> 4) & 0xf))
@@ -62,7 +67,7 @@ EXPORTED_API void dsci_v2(
 }
 
 
-void unpack_block_idxs_wc(
+static void unpack_block_idxs_wc(
     const uint64_t *packed,
     const uint32_t idxBits,
     uint16_t *unpacked
@@ -96,7 +101,7 @@ void unpack_block_idxs_wc(
     }
 }
 
-void unpack_block_idxs_nc(
+static void unpack_block_idxs_nc(
     const uint64_t *packed,
     const uint32_t idxBits,
     uint16_t *unpacked
