@@ -3,49 +3,180 @@
 CLI program to scan your Minecraft worlds and plot block distribution by height or print overall block statistics.
 
 ### Features:
-- Plot distribution of selected blocks by Y layer.
-- Print total statistics of the number of blocks scanned.
-- Supports scanning Anvil and Region worlds (beta 1.7 - now).
-- Save and load scan results from a file. No need to re-scan to visualize different set of blocks.
+- Plot distribution of any selection of blocks by Y layer.
+- Print total statistics of the number of blocks.
+- Supports scanning Anvil, Region and Alpha worlds (tested versions: a1.2.6 - 1.19).
+- Save and load scan results from a file; no need to re-scan to visualize different set of blocks.
 
 ### Example output
 
 - Ore distribution in version 1.12.2
 
-![Ore in 1.12.2](images/example1.png)
+![Ore distribution graph of 1.12.2](images/example1.png)
 
 - Overall block counts in version 1.19
 
 ```
-Loaded data for 2458 chunks, Y levels -64 ~ 96
-Nonair blocks = 78163359	(77.635685%)	(31799.5765 b/ch)
-minecraft:deepslate.0 = 29401483	(29.202996%)	(11961.5472 b/ch)
-minecraft:stone.0 = 29031674	(28.835684%)	(11811.0960 b/ch)
-minecraft:tuff.0 = 2658187	(2.640242%)	(1081.4430 b/ch)
-minecraft:water.0 = 2333244	(2.317492%)	(949.2449 b/ch)
-minecraft:dirt.0 = 2215879	(2.200920%)	(901.4967 b/ch)
-minecraft:andesite.0 = 2164731	(2.150117%)	(880.6880 b/ch)
-minecraft:diorite.0 = 2077764	(2.063737%)	(845.3068 b/ch)
-minecraft:granite.0 = 2054355	(2.040486%)	(835.7832 b/ch)
-minecraft:bedrock.0 = 1887501	(1.874759%)	(767.9011 b/ch)
-minecraft:cave_air.0 = 1873444	(1.860797%)	(762.1823 b/ch)
-minecraft:gravel.0 = 602045	(0.597981%)	(244.9329 b/ch)
-minecraft:grass_block.0 = 407801	(0.405048%)	(165.9076 b/ch)
-minecraft:coal_ore.0 = 220141	(0.218655%)	(89.5610 b/ch)
-minecraft:oak_leaves.0 = 164205	(0.163096%)	(66.8043 b/ch)
-minecraft:sand.0 = 117400	(0.116607%)	(47.7624 b/ch)
-minecraft:birch_leaves.0 = 90281	(0.089672%)	(36.7295 b/ch)
-minecraft:copper_ore.0 = 82047	(0.081493%)	(33.3796 b/ch)
+Loaded data for 56413 chunks, Y levels -64 ~ 256
+378 unique blocks
+1917 block states
+Nonair blocks = 1872173210	(40.511366%)	(33186.9110 b/ch)
+minecraft:air = 2746607975	(59.432984%)	(48687.5007 b/ch)
+minecraft:deepslate[axis=y] = 741053519	(16.035424%)	(13136.2189 b/ch)
+minecraft:stone = 605523935	(13.102742%)	(10733.7659 b/ch)
+minecraft:water[level=0] = 111475752	(2.412189%)	(1976.0649 b/ch)
+minecraft:tuff = 61631469	(1.333624%)	(1092.5047 b/ch)
+minecraft:andesite = 56471794	(1.221975%)	(1001.0422 b/ch)
+minecraft:diorite = 53720626	(1.162444%)	(952.2739 b/ch)
+minecraft:granite = 51893443	(1.122906%)	(919.8845 b/ch)
+minecraft:bedrock = 43325320	(0.937503%)	(768.0024 b/ch)
+minecraft:dirt = 38223181	(0.827099%)	(677.5598 b/ch)
+minecraft:gravel = 29905801	(0.647122%)	(530.1225 b/ch)
+minecraft:grass_block[snowy=false] = 6492168	(0.140482%)	(115.0828 b/ch)
+minecraft:clay = 6305134	(0.136435%)	(111.7674 b/ch)
+minecraft:coal_ore = 5743531	(0.124282%)	(101.8122 b/ch)
+minecraft:copper_ore = 5722340	(0.123824%)	(101.4365 b/ch)
 ...
 ```
 
-## Command line syntax
-```python cli.py [parameters...]```
-- TODO
 
-## Requirements
+## Installation
+
+### Requirements
 - Python 3.9 or higher
-- [uNBT](https://github.com/Metaray/uNBT)
-- numpy
-- matplotlib
-- gcc (to compile accelerators library)
+- Libraries: [uNBT](https://github.com/Metaray/uNBT), numpy, matplotlib
+- Some C compiler for building accelerators library
+
+### Steps
+1. Install Python dependencies
+    
+    `pip install -r requirements.txt`
+
+2. Compile accelerators library
+
+    Run `build_accelerators.py` if you have C compiler that's visible to Python's `distutils` library.
+    
+    Or manually compile `extract_helper.c` into shared library with the same name.
+
+    Example (Windows): `gcc -Wall -Wextra -O3 -march=native -shared extract_helper.c -o extract_helper.dll`
+
+
+## Command line syntax
+`cli.py <data source command> [options...] <visualization command> [options...]`
+
+To display help in terminal use `cli.py -h` or `--help`
+
+### Data source commands
+```
+Load and display block histogram from file:
+load <histfile>
+    histfile                Path of histogram file to display
+
+Calculate block histogram for chosen world:
+extract [--dim DIM] [--limit LIMIT] [--layers LAYERS] <world>
+    world                   Path to directory of a world to scan
+    --dim DIM               Numerical ID of target dimension
+                            (default is 0 - Overworld)
+    --limit LIMIT           Number of chunks to scan (default is all)
+    --layers LAYERS         Vertical scan limits (default is 0-128)
+                            Format: Y_LOWER-Y_UPPER_NONINCLUSIVE
+```
+
+### Visualization commands
+```
+Save extracted block histogram:
+save <output>
+    output                  Name of the new histogram file
+
+Plot histogram of block distribution:
+plot [--norm TYPE] [--normbase NORMBASE] [--solids] [--cumulative]
+     [--layers LAYERS] [--savefig SAVEFIG] <selectors...>
+    selectors               Any number of selector arguments (see below)
+    --norm TYPE             Histogram value normalization (default is total)
+        none                Total counts per layer
+        base                Fraction relative to some block per layer
+                            (specified in --normbase)
+        total               Fraction per block of a layer
+        chunk               Mean count per layer of a chunk
+    --normbase NORMBASE     Blockstate name for relative normalization
+                            (used with --norm base)
+    --solids                Display graph for total non-air blocks
+    --cumulative            Display as a cumulative graph
+    --layers LAYERS         Vertical range to display (default is full range)
+    --savefig SAVEFIG       Save plot to specified file instead of displaying
+                            in a window
+
+Print total block statistics:
+print [--sort ORDER] [--sumstates]
+    --sort ORDER            Display ordering
+        id                  Sort by block ID (only for old version scans)
+        count               Sort by block count descending
+        name                Sort by blockstate name lexicographically
+    --sumstates             Sum counts of different states of a single block
+                            into one
+
+Print selected block histograms as CSV:
+csv [--layers LAYERS] [--bylayer] [--showy] <selectors...>
+    selectors               Any number of selector arguments (see below)
+                            or one argument "*" to output all blocks
+    --layers LAYERS         Vertical range to use
+    --bylayer               Print counts for each Y layer on a separate line
+                            (default is line per selector)
+    --showy                 Add Y level column to output
+```
+
+### Selector format
+```
+Selector is a comma separated list of:
+    blockstate              Plus (+) separated names of blockstates (see below)
+                            to visualize. All blockstates in one selector are
+                            added together.
+    color                   Color of the graph (any color acceptable by
+                            matplotlib, i.e. "blue", "#aa5500")
+    display name            Name of the graph
+
+Color can be omitted. Some distinct color will be used automatically.
+Display name can be omitted. Blockstate name will be used for display instead.
+
+Examples:
+stone
+minecraft:chest,,Chest
+minecraft:water,blue,water
+minecraft:coal_ore+minecraft:deepslate_coal_ore,black,Coal ore
+
+Alternatively, selector can name a file containing multiple selectors.
+Name is prefixed with @ symbol.
+File will be read as CSV described above: nonempty lines will be parsed and
+added to selector list, empty lines and lines starting with # symbol will be
+skipped.
+```
+
+### Blockstate format
+```
+Full form:
+namespace:block_name[property1=value1,property2=value2]
+
+If state dictionary is omitted (i.e. "minecraft:water") - visualizations sum
+all different states together.
+
+Namespace can be omitted (i.e. "redstone_ore[lit=true]") - assumes default
+namespace of "minecraft:"
+```
+
+
+## Example usage
+```
+Scan full height range of 1.19 Overworld and save results to file.
+cli.py extract "MC 1.19 World" --limit=-64-256 save my_1.19_scan.dat
+
+Do a quick scan (just 500 chunks) of Nether and display block counts.
+cli.py extract "MC 1.19 World" --dim=-1 --limit=500 print
+
+Load scan and display block counts without specific state info.
+cli.py load my_1.19_scan.dat print --sumstates
+
+Load scan and plot ore distribution (selectors are inside a file "vanilla_ores")
+cli.py load my_1.19_scan.dat plot @vanilla_ores
+```
+
+Example scan data and selector files are provided in `sample-data` directory.

@@ -1,0 +1,9 @@
+minecraft:coal_ore+minecraft:deepslate_coal_ore,black,Coal ore
+minecraft:iron_ore+minecraft:deepslate_iron_ore,silver,Iron ore
+minecraft:copper_ore+minecraft:deepslate_copper_ore,orange,Copper ore
+minecraft:lapis_ore+minecraft:deepslate_lapis_ore,blue,Lapis ore
+minecraft:redstone_ore+minecraft:deepslate_redstone_ore,red,Redstone ore
+minecraft:gold_ore+minecraft:deepslate_gold_ore,gold,Gold ore
+minecraft:budding_amethyst,purple,Budding amethyst
+minecraft:diamond_ore+minecraft:deepslate_diamond_ore,cyan,Diamond ore
+minecraft:emerald_ore+minecraft:deepslate_emerald_ore,green,Emerald ore

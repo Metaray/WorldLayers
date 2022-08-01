@@ -1,10 +1,12 @@
 # Project specific files
 *.dat
 *.png
-!/images/**
 *.dll
 *.so
 *.txt
+!requirements.txt
+!/images/**
+!/sample-data/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -33,3 +35,7 @@ var/
 
 # Mypy files
 .mypy_cache/
+
+# Virtual environment folders
+venv/
+.venv/

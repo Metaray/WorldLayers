@@ -1,0 +1,6 @@
+minecraft:netherrack,red,Netherrack
+minecraft:lava,orange,Lava
+minecraft:quartz_ore,gray,Quartz ore
+minecraft:fire,yellow,Fire
+minecraft:soul_sand,brown,Soul sand
+minecraft:magma,black,Magma block
