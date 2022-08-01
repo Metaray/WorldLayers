@@ -2,7 +2,8 @@ import argparse
 import threading
 import csv
 from typing import List, NamedTuple, Optional
-from scanners import *
+from common import *
+from scanners import create_scan
 
 
 class InvalidScannerOperation(Exception):
