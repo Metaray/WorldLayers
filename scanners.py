@@ -112,6 +112,11 @@ def scan_world_dimension_new(
     """Scanner for versions 1.13+ (anvil format)"""
     from accelerators import scan_v13_accel
 
+    # Data version notes:
+    # 2529 - 20w17a (pre 1.16) - Blockstate bits no longer packed across 64 bit words
+    # 2836 - 21w39a (pre 1.18) - Moved "BlockStates" and "Palette" inside new "block_states" tag
+    # 2844 - 21w43a (pre 1.18) - Removed "Level" tag (all contained tags moved "lower"), tag naming changes
+
     # Set air index to zero for convinience
     blockstate_to_idx = {'minecraft:air': 0}
     STATE_LIM = max(blockstate_to_idx.values()) + 1
@@ -131,7 +136,7 @@ def scan_world_dimension_new(
         if level_data['Status'].value not in STATUSES_READY:
             continue
         
-        has_carry = data_version < 2534
+        has_carry = data_version < 2529
         for section in level_data['Sections' if data_version < 2844 else 'sections']:
             section_y = section['Y'].value
             if not (min_section <= section_y < max_section):
@@ -139,13 +144,15 @@ def scan_world_dimension_new(
             
             if data_version < 2836:
                 if 'Palette' not in section:
+                    # Somtimes Palette is not written (section is empty - only air?)
                     continue
                 states = section['BlockStates'].value
                 palette = section['Palette']
             else:
-                if 'data' not in section['block_states']:
-                    continue
-                states = section['block_states']['data'].value
+                if 'data' in section['block_states']:
+                    states = section['block_states']['data'].value
+                else:
+                    states = None
                 palette = section['block_states']['palette']
             
             for idx, block in enumerate(palette):
@@ -164,17 +171,21 @@ def scan_world_dimension_new(
                     block_counts = np.hstack((block_counts, ZERO_LAYER))
                 index_map[idx] = bid
             
-            # `idx` holds maximum index in palette here
-            # `BlockStates` is packed 16x16x16 array in YZX order
-            scan_v13_accel(
-                block_counts,
-                block_counts.shape[1],
-                section_y - min_section,
-                np.array(states, np.int64),
-                index_map,
-                idx,
-                has_carry,
-            )
+            if states is not None:
+                # `states` is packed array of 16x16x16 area of blocks in YZX order
+                scan_v13_accel(
+                    block_counts,
+                    block_counts.shape[1],
+                    section_y - min_section,
+                    np.array(states, np.int64),
+                    index_map,
+                    len(palette) - 1,
+                    has_carry,
+                )
+            else:
+                # Block states were omitted - section is filled with one block
+                y_base = (section_y - min_section) * 16
+                block_counts[y_base:y_base+16, index_map[0]] += 16**2
 
         chunks_scanned += 1
         if chunks_scanned >= scan_limit:
