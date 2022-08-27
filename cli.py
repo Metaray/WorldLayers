@@ -10,6 +10,20 @@ class InvalidScannerOperation(Exception):
     pass
 
 
+class DisplayBlockSelector(NamedTuple):
+    # Blockstate selector
+    # '+' separated list of CompactState
+    selectors: str
+    # Matplotlib colors / None for auto color
+    color: Optional[str]
+    # Legend name override / None - equal to `names`
+    display_name: Optional[str]
+
+
+def split_to_blockstates(combined: str) -> List[BlockSelector]:
+    return [parse_blockstate(state.strip()) for state in combined.split('+')]
+
+
 def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
     extract_file = args.output
     save_scan_data(extract_file, scan_data)
@@ -59,16 +73,6 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
         show_count(name, total)
 
 
-class DisplayBlockSelector(NamedTuple):
-    # Blockstate selector
-    # '+' separated list of CompactState
-    selectors: str
-    # Matplotlib colors / None for auto color
-    color: Optional[str]
-    # Legend name override / None - equal to `names`
-    display_name: Optional[str]
-
-
 def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
     '''Parse a list of display selectors
 
@@ -82,9 +86,8 @@ def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
         while len(parts) < 3:
             parts.append('')
         
-        # Test for selector correctness
-        for name in parts[0].split('+'):
-            parse_blockstate(name)
+        # Test for selector correctness (calls parse, throws on error)
+        split_to_blockstates(parts[0])
 
         blocks_shown.append(DisplayBlockSelector(
             selectors=parts[0],
@@ -127,11 +130,10 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
     blocks_shown = load_block_selection(args.select)
 
     if args.norm == 'base':
-        normalize_base = parse_blockstate(args.normbase)
-        y_label = f'Fraction relative to {serialize_blockstate(normalize_base)}'
-        base_mx = np.maximum(get_block_hist(scan_data, normalize_base), 1)
+        y_label = f'Fraction relative to\n{args.normbase}'
+        base_mx = sum_blocks_selection(scan_data, split_to_blockstates(args.normbase))
         def norm_func(x: np.ndarray) -> np.ndarray:
-            return x / base_mx
+            return np.where(base_mx > 0, x / np.maximum(base_mx, 1), 0)
     
     elif args.norm == 'total':
         y_label = 'Fraction per block'
@@ -164,7 +166,7 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
         display_name = show_info.display_name or show_info.selectors
 
         try:
-            hist = sum_blocks_selection(scan_data, map(parse_blockstate, show_info.selectors.split('+')))
+            hist = sum_blocks_selection(scan_data, split_to_blockstates(show_info.selectors))
             print(f'{display_name} = {hist.sum()} blocks')
         except ValueError:
             print(f'Found no blocks matching selectors: {show_info.selectors}')
@@ -230,7 +232,7 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
             display_name = show_info.display_name or show_info.selectors
             row = [display_name]
             try:
-                hist = sum_blocks_selection(scan_data, map(parse_blockstate, show_info.selectors.split('+')))
+                hist = sum_blocks_selection(scan_data, split_to_blockstates(show_info.selectors))
                 print(f'{display_name} = {hist.sum()} blocks')
                 row.extend(hist)
             except ValueError:
@@ -293,7 +295,7 @@ def main():
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
         parse_vis_plot.add_argument('select', nargs='+', help='Any number of selector arguments')
         parse_vis_plot.add_argument('--norm', choices=['none', 'base', 'total', 'chunk'], default='total', help='Histogram value normalization (default is total)')
-        parse_vis_plot.add_argument('--normbase', default='minecraft:stone', help='Blockstate name for relative normalization (used with --norm base)')
+        parse_vis_plot.add_argument('--normbase', default='minecraft:stone', help='Blockstate name (or names separated with "+") for relative normalization (used with --norm base)')
         parse_vis_plot.add_argument('--solids', action='store_true', help='Display graph for total non-air blocks')
         parse_vis_plot.add_argument('--cumulative', action='store_true', help='Display as cumulative graph')
         parse_vis_plot.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to display (default is full range)')

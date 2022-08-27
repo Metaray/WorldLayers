@@ -1,6 +1,6 @@
 # WorldLayers
 
-CLI program to scan your Minecraft worlds and plot block distribution by height or print overall block statistics.
+Command line program to scan your Minecraft worlds and plot block distribution by height or print overall block statistics.
 
 ### Features:
 - Plot distribution of any selection of blocks by Y layer.
@@ -10,11 +10,11 @@ CLI program to scan your Minecraft worlds and plot block distribution by height 
 
 ### Example output
 
-- Ore distribution in version 1.12.2
+- Ore distribution (version 1.12.2)
 
 ![Ore distribution graph of 1.12.2](images/example1.png)
 
-- Overall block counts in version 1.19
+- Overall block counts (version 1.19)
 
 ```
 Loaded data for 56413 chunks, Y levels -64 ~ 256
@@ -54,11 +54,11 @@ minecraft:copper_ore = 5722340	(0.123824%)	(101.4365 b/ch)
 
 2. Compile accelerators library
 
-    Run `build_accelerators.py` if you have C compiler that's visible to Python's `distutils` library.
+    Run `build_accelerators.py` if you have C compiler that is visible to Python's `distutils` library.
     
-    Or manually compile `extract_helper.c` into shared library with the same name.
+    Or manually compile `extract_helper.c` into shared library with the same name. For example on Windows with GCC:
 
-    Example (Windows): `gcc -Wall -Wextra -O3 -march=native -shared extract_helper.c -o extract_helper.dll`
+    `gcc -Wall -Wextra -O3 -march=native -shared extract_helper.c -o extract_helper.dll`
 
 
 ## Command line syntax
@@ -98,8 +98,8 @@ plot [--norm TYPE] [--normbase NORMBASE] [--solids] [--cumulative]
                             (specified in --normbase)
         total               Fraction per block of a layer
         chunk               Mean count per layer of a chunk
-    --normbase NORMBASE     Blockstate name for relative normalization
-                            (used with --norm base)
+    --normbase NORMBASE     Blockstate name (or names separated with "+") for
+                            relative normalization (used with --norm base)
     --solids                Display graph for total non-air blocks
     --cumulative            Display as a cumulative graph
     --layers LAYERS         Vertical range to display (default is full range)
@@ -165,18 +165,20 @@ namespace of "minecraft:"
 
 
 ## Example usage
-```
-Scan full height range of 1.19 Overworld and save results to file.
-cli.py extract "MC 1.19 World" --limit=-64-256 save my_1.19_scan.dat
+- Scan full height range of 1.19 Overworld and save results
 
-Do a quick scan (just 500 chunks) of Nether and display block counts.
-cli.py extract "MC 1.19 World" --dim=-1 --limit=500 print
+    `cli.py extract "MC 1.19 World" --limit=-64-256 save my_1.19_scan.dat`
 
-Load scan and display block counts without specific state info.
-cli.py load my_1.19_scan.dat print --sumstates
+- Do a small scan (500 chunks) of Nether and display block counts
 
-Load scan and plot ore distribution (selectors are inside a file "vanilla_ores")
-cli.py load my_1.19_scan.dat plot @vanilla_ores
-```
+    `cli.py extract "MC 1.19 World" --dim=-1 --limit=500 print`
 
-Example scan data and selector files are provided in `sample-data` directory.
+- Load scan and display block counts without separating states
+
+    `cli.py load my_1.19_scan.dat print --sumstates`
+
+- Load scan and plot ore distribution (selectors are inside a file "vanilla_ores")
+
+    `cli.py load my_1.19_scan.dat plot @vanilla_ores`
+
+Sample scan data and selector files are provided in `sample-data` directory.

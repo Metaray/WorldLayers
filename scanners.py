@@ -160,9 +160,10 @@ def scan_world_dimension_new(
                 if save_properties and 'Properties' in block:
                     # This must correctly keep in sync with `serialize_blockstate()`
                     props = [(k, v.value) for k, v in block['Properties'].items()]
-                    props.sort()
-                    props = ','.join(f'{k}={v}' for k, v in props)
-                    name = f'{name}[{props}]'
+                    if props:
+                        props.sort()
+                        props = ','.join(f'{k}={v}' for k, v in props)
+                        name = f'{name}[{props}]'
                 
                 try:
                     bid = blockstate_to_idx[name]
