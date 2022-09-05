@@ -295,7 +295,7 @@ def main():
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
         parse_vis_plot.add_argument('select', nargs='+', help='Any number of selector arguments')
         parse_vis_plot.add_argument('--norm', choices=['none', 'base', 'total', 'chunk'], default='total', help='Histogram value normalization (default is total)')
-        parse_vis_plot.add_argument('--normbase', default='minecraft:stone', help='Blockstate name (or names separated with "+") for relative normalization (used with --norm base)')
+        parse_vis_plot.add_argument('--normbase', default='minecraft:stone+minecraft:deepslate', help='Blockstate name (or names separated with "+") for relative normalization (used with --norm base)')
         parse_vis_plot.add_argument('--solids', action='store_true', help='Display graph for total non-air blocks')
         parse_vis_plot.add_argument('--cumulative', action='store_true', help='Display as cumulative graph')
         parse_vis_plot.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to display (default is full range)')

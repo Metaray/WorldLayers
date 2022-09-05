@@ -32,7 +32,7 @@ def scan_world_dimension(
     bounds: Tuple[int, int],
     **_
 ) -> DimScanData:
-    """Scanner for versions >=1.2.1 <=1.12.2 (anvil format)"""
+    """Scanner for versions >=1.2.1 <=1.12.2 (anvil format, before Flattening)"""
     from accelerators import scan_v2_accel
 
     ID_LIM = 2**12
@@ -49,9 +49,8 @@ def scan_world_dimension(
     # Accelerator always gets 'Add' and 'Add2' arrays passed in if they are present, but has no bounds checks
     # Can there be situations where there is no FML mapping / it lies / world was converted weirdly?
     
-    # For now let's silently truncate invalid ranges
-    min_section = max(bounds[0] // 16, 0)
-    max_section = min((bounds[1] + 15) // 16, 16)
+    min_section = bounds[0] // 16
+    max_section = (bounds[1] + 15) // 16
     height_limit = (max_section - min_section) * 16
 
     chunks_scanned = 0
@@ -99,8 +98,6 @@ def scan_world_dimension(
     )
 
 
-STATUSES_READY = {'light', 'spawn', 'heightmaps', 'full', 'fullchunk'}
-
 def scan_world_dimension_new(
     save_path: str,
     dim_id: int,
@@ -109,7 +106,7 @@ def scan_world_dimension_new(
     save_properties: bool = True,
     **_
 ) -> DimScanData:
-    """Scanner for versions 1.13+ (anvil format)"""
+    """Scanner for versions 1.13+ (anvil format, after Flattening)"""
     from accelerators import scan_v13_accel
 
     # Data version notes:
@@ -117,16 +114,22 @@ def scan_world_dimension_new(
     # 2836 - 21w39a (pre 1.18) - Moved "BlockStates" and "Palette" inside new "block_states" tag
     # 2844 - 21w43a (pre 1.18) - Removed "Level" tag (all contained tags moved "lower"), tag naming changes
 
+    # Chunk statuses after all terrain and features have been generated
+    STATUSES_READY = {
+        'postprocessed',
+        'decorated', 'lighted', 'mobs_spawned', 'finalized', 'fullchunk',
+        'features', 'light', 'spawn', 'heightmaps', 'full',
+    }
+
     # Set air index to zero for convinience
     blockstate_to_idx = {'minecraft:air': 0}
-    STATE_LIM = max(blockstate_to_idx.values()) + 1
     
     min_section = bounds[0] // 16
     max_section = (bounds[1] + 15) // 16
     height_limit = (max_section - min_section) * 16
     
     chunks_scanned = 0
-    block_counts = np.zeros((height_limit, STATE_LIM), _CTR_DTYPE)
+    block_counts = np.zeros((height_limit, len(blockstate_to_idx)), _CTR_DTYPE)
     ZERO_LAYER = np.zeros((height_limit, 1), _CTR_DTYPE)
     index_map = np.zeros(16**3, np.uint32)
 
