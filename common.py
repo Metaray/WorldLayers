@@ -1,10 +1,10 @@
-import os
+from pathlib import Path
 import uNBT as nbt
 import numpy as np
 import json
 import re
 from collections import defaultdict
-from typing import List, Tuple, Optional, Dict, Union
+from typing import IO, List, Tuple, Optional, Dict, Union
 
 
 BlockState = Tuple[str, Optional[Dict[str, str]]]
@@ -17,14 +17,16 @@ BlockSelector = Union[str, BlockState]
 AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
 
 
-def resource_location(name: str) -> str:
-    return os.path.join(os.path.dirname(__file__), name)
+def open_resource(name: str, mode: str) -> IO:
+    if mode in {'r', 'rb'}:
+        return (Path(__file__).parent / name).open(mode)
+    raise ValueError('Can only open resource for reading')
 
 
 def load_old_blockid_mapping() -> BlockMapping:
     """Load static mapping for versions <1.13"""
     # Pretty sure ids didn't change since alpha (maybe even infdev)
-    with open(resource_location('ids.json')) as id_file:
+    with open_resource('ids.json', 'r') as id_file:
         ids = json.load(id_file)
     mapping = {}
     for block_info in ids['blocks']:
@@ -38,24 +40,24 @@ def load_old_blockid_mapping() -> BlockMapping:
 
 def get_blockid_mapping(save_path: str) -> BlockMapping:
     """Create mapping to and from symbolic block names"""
+    # Try reading Forge block registry
     try:
-        root = nbt.read_nbt_file(os.path.join(save_path, 'level.dat'))
-    except FileNotFoundError:
-        root = None
+        root = nbt.read_nbt_file(str(Path(save_path) / 'level.dat'))
+        block_registry = root['FML']['Registries']['minecraft:blocks']['ids']
+    except (FileNotFoundError, KeyError):
+        block_registry = None
     
-    if root and 'FML' in root:
-        # Forge stores all ids in level.dat
+    if block_registry:
         mapping = {}
-        for block_info in root['FML']['Registries']['minecraft:blocks']['ids']:
+        for block_info in block_registry:
             name = block_info['K'].value
             id = block_info['V'].value
             mapping[name] = id
-        print(f'Got Forge block id mapping. {len(mapping)} entries.')
+        print(f'Found Forge block id mapping ({len(mapping)} entries)')
     
     else:
-        # For normal minecraft save load from prepared file
         mapping = load_old_blockid_mapping()
-        print(f'No mapping, using fallback. {len(mapping)} entries.')
+        print(f'Using Vanilla 1.12.2 mapping ({len(mapping)} entries)')
 
     return mapping
 
@@ -353,15 +355,15 @@ def convert_to_new_bs_format(
     state_count = block_counts.shape[1]
 
     # Keep air at 0
-    # Discard mappings for blocks with nonzero count
+    # Discard mappings for blocks with zero counts
     nonzero_sids = []
-    nonzero_states = []
+    nonzero_counts = []
     for sid in range(state_count):
         state_hist = block_counts[:,sid:sid+1]
         if state_hist.sum() or sid == 0:
             nonzero_sids.append(sid)
-            nonzero_states.append(state_hist)
-    block_counts = np.concatenate(nonzero_states, axis=1)
+            nonzero_counts.append(state_hist)
+    block_counts = np.concatenate(nonzero_counts, axis=1)
     
     idx_to_bs = {v: k for k, v in blockstate_to_idx.items()}
 
@@ -370,7 +372,7 @@ def convert_to_new_bs_format(
     for new_sid, old_sid in enumerate(nonzero_sids):
         id = old_sid // 16
         meta = old_sid % 16
-        name = idx_to_bs[id]
+        name = idx_to_bs.get(id, str(id))
         blockstate = serialize_blockstate((name, {_OLD_META_PROPERTY: str(meta)}))
         new_mapping[blockstate] = new_sid
         old_to_new[old_sid] = blockstate

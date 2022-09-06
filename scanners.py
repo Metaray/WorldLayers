@@ -116,9 +116,9 @@ def scan_world_dimension_new(
 
     # Chunk statuses after all terrain and features have been generated
     STATUSES_READY = {
-        'postprocessed',
-        'decorated', 'lighted', 'mobs_spawned', 'finalized', 'fullchunk',
-        'features', 'light', 'spawn', 'heightmaps', 'full',
+        'decorated', 'lighted', 'mobs_spawned', 'finalized', 'postprocessed',  # 1.13
+        'fullchunk',
+        'features', 'light', 'spawn', 'heightmaps', 'full',  # 1.14+
     }
 
     # Set air index to zero for convinience
@@ -296,19 +296,17 @@ def scan_world_dimension_alpha(
 
 
 def determine_scan_function(save_path: str):
-    # Since 1.9 can use [level.dat].Data.DataVersion
+    # Since 1.9 version is stored in [level.dat].Data.DataVersion
     # First version after Flattening: 17w47a (data version: 1451)
-    # 1.13 data version: 1519
     level_data = nbt.read_nbt_file(str(Path(save_path) / 'level.dat'))['Data']
     if 'DataVersion' in level_data and level_data['DataVersion'].value >= 1451:
         return scan_world_dimension_new
     
-    # Anvil worlds have this tag
-    if 'initialized' in level_data:
+    # Distinguish versions by presence of files
+    # Newer versions get priority
+    if any(Path(save_path).rglob('r.*.*.mca')):
         return scan_world_dimension
-    
-    # Distinguish between alpha and region
-    if any(Path(save_path).rglob('*.mcr')):
+    elif any(Path(save_path).rglob('r.*.*.mcr')):
         return scan_world_dimension_old
     else:
         return scan_world_dimension_alpha
