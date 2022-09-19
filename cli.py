@@ -34,46 +34,78 @@ def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
 
 def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
+    if args.layers:
+        crop_histogram(scan_data, args.layers)
+    
     chunks_scanned = scan_data.chunks_scanned
-    totals = scan_data.histogram.sum(axis=0)
+    histogram = scan_data.histogram
     volume = chunks_scanned * scan_data.height * 16**2
 
     if args.sumstates:
         visdata = [
             (
                 None,
-                sum(totals[scan_data.blockstate_to_idx[state]] for state in states),
+                sum(histogram[:, scan_data.blockstate_to_idx[state]] for state in states),
                 name,
             )
             for name, states in scan_data.name_to_blockstates.items()
         ]
     else:
         idx_to_blockstate = scan_data.idx_to_blockstate
-        visdata = [(i, totals[i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
+        visdata = [(i, histogram[:, i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
 
     if args.sort == 'count':
-        visdata.sort(key=lambda ci: -ci[1])  # sort by block count descending
+        visdata.sort(key=lambda ci: -np.sum(ci[1]))  # sort by block count descending
     elif args.sort == 'name':
         visdata.sort(key=lambda ci: ci[2])  # sort by blockstate lexicographically
     else:
         visdata.sort(key=lambda ci: ci[0])  # sort by state id ascending (legacy)
     
-    def show_count(name: str, count: int) -> None:
+    def important_range(hist: NDArray[np.int64]) -> Tuple[int, int]:
+        # Exact range block was present
+        # nonzero = np.argwhere(hist)
+        # ymin = scan_data.base_y + nonzero[0][0]
+        # ymax = scan_data.base_y + nonzero[-1][0]
+        # return ymin, ymax
+
+        # Range where most of the blocks were found (remove trails)
+        # Removes 1% of blocks from lowest and highest Y levels
+        hacc = np.cumsum(hist)
+        mincount = hacc[-1] * 0.99
+        l, r = 0, len(hacc) - 1
+        while l < r:
+            left_sum = hacc[r] - hacc[l]
+            right_sum = hacc[r - 1] - hacc[l] + hist[l]
+            if left_sum > right_sum:
+                if left_sum < mincount:
+                    break
+                l += 1
+            else:
+                if right_sum < mincount:
+                    break
+                r -= 1
+        return scan_data.base_y + l, scan_data.base_y + r
+    
+    def show_count(name: str, hist: NDArray[np.int64]) -> None:
+        count = np.sum(hist)
+        ymin, ymax = important_range(hist)
         print(
             f'{name} = {count}',
             f'({count / volume:%})',
             f'({count / chunks_scanned:.4f} b/ch)',
-            sep='\t'
+            f'(Y {ymin} ~ {ymax})',
+            sep='\t',
         )
 
     log(f'{len(scan_data.name_to_blockstates)} unique blocks')
     log(f'{scan_data.state_count} block states')
 
-    airsum = sum_blocks_selection(scan_data, AIR_BLOCKS).sum()
-    show_count('Nonair blocks', totals.sum() - airsum)
+    air_hist = sum_blocks_selection(scan_data, AIR_BLOCKS)
+    show_count('Nonair blocks', histogram.sum(axis=1) - air_hist)
 
-    for _, total, name in visdata:
-        show_count(name, total)
+    for _, hist, name in visdata:
+        if np.sum(hist) > 0:
+            show_count(name, hist)
 
 
 def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
@@ -299,6 +331,7 @@ def main() -> None:
         parse_vis_print = subparsers.add_parser('print', help='Print total block statistics')
         parse_vis_print.add_argument('--sort', choices=['id', 'count', 'name'], default='count', help='Display ordering')
         parse_vis_print.add_argument('--sumstates', action='store_true', help='Sum counts of different states of a single block into one')
+        parse_vis_print.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to use (default is full range)')
         
         parse_vis_plot = subparsers.add_parser('plot', help='Plot histogram of block distribution')
         parse_vis_plot.add_argument('select', nargs='+', help='Any number of selector arguments')
@@ -311,7 +344,7 @@ def main() -> None:
 
         parse_vis_csv = subparsers.add_parser('csv', help='Print selected block histograms as CSV')
         parse_vis_csv.add_argument('select', nargs='+', help='Any number of selector arguments or one argument "*" to output all blocks')
-        parse_vis_csv.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to use')
+        parse_vis_csv.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to output (default is full range)')
         parse_vis_csv.add_argument('--bylayer', action='store_true', help='Print counts for each Y layer on a separate line (default is line per selector)')
         parse_vis_csv.add_argument('--showy', action='store_true', help='Add Y level column to CSV')
 

@@ -43,9 +43,9 @@ minecraft:copper_ore = 5722340	(0.123824%)	(101.4365 b/ch)
 ## Installation
 
 ### Requirements
-- Python 3.9 or higher
+- Python 3.9 or newer
 - Libraries: [uNBT](https://github.com/Metaray/uNBT), numpy, matplotlib
-- Some C compiler for building accelerators library
+- C compiler (for building accelerators library)
 
 ### Steps
 1. Install Python dependencies
@@ -107,19 +107,20 @@ plot [--norm TYPE] [--normbase NORMBASE] [--solids] [--cumulative]
                             in a window
 
 Print total block statistics:
-print [--sort ORDER] [--sumstates]
+print [--sort ORDER] [--sumstates] [--layers LAYERS]
     --sort ORDER            Display ordering
         id                  Sort by block ID (only for old version scans)
         count               Sort by block count descending
         name                Sort by blockstate name lexicographically
     --sumstates             Sum counts of different states of a single block
                             into one
+    --layers LAYERS         Vertical range to use (default is full range)
 
 Print selected block histograms as CSV:
 csv [--layers LAYERS] [--bylayer] [--showy] <selectors...>
     selectors               Any number of selector arguments (see below)
                             or one argument "*" to output all blocks
-    --layers LAYERS         Vertical range to use
+    --layers LAYERS         Vertical range to output (default is full range)
     --bylayer               Print counts for each Y layer on a separate line
                             (default is line per selector)
     --showy                 Add Y level column to output
@@ -139,16 +140,15 @@ Color can be omitted. Some distinct color will be used automatically.
 Display name can be omitted. Blockstate name will be used for display instead.
 
 Examples:
-stone
-minecraft:chest,,Chest
-minecraft:water,blue,water
-minecraft:coal_ore+minecraft:deepslate_coal_ore,black,Coal ore
+    stone
+    minecraft:chest,,Chest
+    minecraft:water,blue,water
+    minecraft:coal_ore+minecraft:deepslate_coal_ore,black,Coal ore
 
-Alternatively, selector can name a file containing multiple selectors.
-Name is prefixed with @ symbol.
-File will be read as CSV described above: nonempty lines will be parsed and
-added to selector list, empty lines and lines starting with # symbol will be
-skipped.
+Alternatively, selector can name a file containing multiple selectors. For this
+file name must be prefixed with @ symbol. File will be read as CSV described
+above, nonempty lines will be parsed and added to selector list, empty lines
+and lines starting with # symbol will be skipped.
 ```
 
 ### Blockstate format
@@ -167,7 +167,7 @@ namespace of "minecraft:"
 ## Example usage
 - Scan full height range of 1.19 Overworld and save results
 
-    `cli.py extract "MC 1.19 World" --limit=-64-256 save my_1.19_scan.dat`
+    `cli.py extract "MC 1.19 World" --limit=-64:256 save my_1.19_scan.dat`
 
 - Do a small scan (500 chunks) of Nether and display block counts
 
