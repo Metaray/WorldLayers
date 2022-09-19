@@ -19,7 +19,7 @@ def iter_world_chunks(save_path: str, dim_id: int, world_type: str) -> Iterable[
     
     else:
         for rfile_info in nbt.enumerate_world(save_path, world_type)[dim_id]:
-            print('Scanning', rfile_info.path)
+            log('Scanning', rfile_info.path)
             region = nbt.Region.from_file(rfile_info.path)
             for chunk in region.iter_nonempty():
                 yield chunk.nbt
@@ -40,9 +40,9 @@ def scan_world_dimension(
     
     blockstate_to_idx = get_blockid_mapping(save_path)
     max_map_id = max(blockstate_to_idx.values())
-    print('Maximum ID is', max_map_id)
+    log('Maximum ID is', max_map_id)
     if max_map_id >= ID_LIM:
-        print('Expanding ID range')
+        log('Expanding ID range')
         ID_LIM = max_map_id + 1
         STATE_LIM = ID_LIM * 16
     
@@ -319,7 +319,7 @@ def create_scan(
     bounds: Tuple[int, int]
 ) -> DimScanData:
     scan_func = determine_scan_function(save_path)
-    print(f'Using scanner: {scan_func.__name__}')
+    log(f'Using scanner: {scan_func.__name__}')
 
     t_start = clock()
     
@@ -334,15 +334,15 @@ def create_scan(
     try:
         crop_histogram(scan_data, bounds)
     except ValueError as err:
-        print(err)  # Ignore errors to not lose data on large scans
+        log(err)  # Ignore errors to not lose data on large scans
     
     t_finish = clock()
 
-    print(f'Scanned {scan_data.chunks_scanned} chunks in {t_finish - t_start:.3f} seconds')
-    print(f'{scan_data.state_count} unique block states')
+    log(f'Scanned {scan_data.chunks_scanned} chunks in {t_finish - t_start:.3f} seconds')
+    log(f'{scan_data.state_count} unique block states')
 
     scan_volume = scan_data.chunks_scanned * scan_data.height * 16**2
     nonair_count = scan_volume - sum_blocks_selection(scan_data, AIR_BLOCKS).sum()
-    print(f'{nonair_count:,}/{scan_volume:,} non-air blocks (Y levels {bounds[0]} ~ {bounds[1]})')
+    log(f'{nonair_count:,}/{scan_volume:,} non-air blocks (Y levels {bounds[0]} ~ {bounds[1]})')
     
     return scan_data

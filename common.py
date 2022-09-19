@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import uNBT as nbt
 import numpy as np
 import json
@@ -17,6 +18,10 @@ BlockSelector = Union[str, BlockState]
 
 
 AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
+
+
+def log(*args: object) -> None:
+    print(*args, file=sys.stderr)
 
 
 def open_resource(name: str, mode: str) -> IO[AnyStr]:
@@ -55,11 +60,11 @@ def get_blockid_mapping(save_path: str) -> BlockMapping:
             name = block_info['K'].value
             id = block_info['V'].value
             mapping[name] = id
-        print(f'Found Forge block id mapping ({len(mapping)} entries)')
+        log(f'Found Forge block id mapping ({len(mapping)} entries)')
     
     else:
         mapping = load_old_blockid_mapping()
-        print(f'Using Vanilla 1.12.2 mapping ({len(mapping)} entries)')
+        log(f'Using Vanilla 1.12.2 mapping ({len(mapping)} entries)')
 
     return mapping
 
@@ -116,14 +121,6 @@ def serialize_blockstate(blockstate: BlockState) -> CompactState:
     if _OLD_META_PROPERTY in data:
         return f'{name}[{data[_OLD_META_PROPERTY]}]'
     return f'{name}[{",".join(f"{k}={data[k]}" for k in sorted(data.keys()))}]'
-
-
-def parse_dashed_range(s: str) -> Tuple[int, int]:
-    """Parse numeric ranges like 123-456"""
-    m = re.match(r'^(-?\d+)[-~/](-?\d+)$', s, re.ASCII)
-    if m:
-        return (int(m.group(1)), int(m.group(2)))
-    raise ValueError('Not a valid range')
 
 
 class DimScanData:
@@ -270,7 +267,7 @@ def load_scan(path: str) -> DimScanData:
     def get(name: str, default: _T) -> _T:
         if name in data:
             return data[name].value
-    else:
+        else:
             return default
 
     # Here are a bunch of checks and fallback values to support old scan formats
@@ -302,7 +299,7 @@ def load_scan(path: str) -> DimScanData:
                 for mapping in data['OldIdMapping']
             }
 
-    print(f'Loaded data for {chunks_scanned} chunks, Y levels {base_y} ~ {base_y + HEI_LIM}')
+    log(f'Loaded data for {chunks_scanned} chunks, Y levels {base_y} ~ {base_y + height}')
     return DimScanData(
         histogram=block_counts,
         chunks_scanned=chunks_scanned,

@@ -1,6 +1,7 @@
 import argparse
 import threading
 import csv
+import re
 from typing import Any, List, NamedTuple, Optional, Iterable, Tuple
 import numpy as np
 from numpy.typing import NDArray
@@ -29,7 +30,7 @@ def split_to_blockstates(combined: str) -> List[BlockSelector]:
 def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
     extract_file = args.output
     save_scan_data(extract_file, scan_data)
-    print(f'Saved block counts to {extract_file}')
+    log(f'Saved block counts to {extract_file}')
 
 
 def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
@@ -65,8 +66,8 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
             sep='\t'
         )
 
-    print(f'{len(scan_data.name_to_blockstates)} unique blocks')
-    print(f'{scan_data.state_count} block states')
+    log(f'{len(scan_data.name_to_blockstates)} unique blocks')
+    log(f'{scan_data.state_count} block states')
 
     airsum = sum_blocks_selection(scan_data, AIR_BLOCKS).sum()
     show_count('Nonair blocks', totals.sum() - airsum)
@@ -171,7 +172,7 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
             hist = sum_blocks_selection(scan_data, split_to_blockstates(show_info.selectors))
             print(f'{display_name} = {hist.sum()} blocks')
         except ValueError:
-            print(f'Found no blocks matching selectors: {show_info.selectors}')
+            log(f'Found no blocks matching selectors: {show_info.selectors}')
             hist = scan_data.zero_histogram
         
         graphs.append(GraphData(
@@ -235,7 +236,7 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
                 print(f'{display_name} = {hist.sum()} blocks')
                 row.extend(hist)
             except ValueError:
-                print(f'Found no blocks matching selectors: {show_info.selectors}')
+                log(f'Found no blocks matching selectors: {show_info.selectors}')
                 row.extend([0] * height)
             table.append(row)
     else:
@@ -284,6 +285,14 @@ def operation_load_and_process(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    def parse_dashed_range(s: str) -> Tuple[int, int]:
+        """Parse numeric ranges like 123-456"""
+        m = re.match(r'^(-?\d+)[-~/:](-?\d+)$', s, re.ASCII)
+        if m:
+            return (int(m.group(1)), int(m.group(2)))
+        raise ValueError('Not a valid range')
+
+
     def add_operation_parsers(parser: argparse.ArgumentParser) -> None:
         subparsers = parser.add_subparsers(dest='vismode', required=True, help='Visualization mode')
         
@@ -309,6 +318,7 @@ def main() -> None:
         parse_save_scan = subparsers.add_parser('save', help='Save extracted block histogram')
         parse_save_scan.add_argument('output', help='Name of the new histogram file')
 
+
     parser = argparse.ArgumentParser(description='Create a histogram of block distribution by height of a Minecraft world')
     action_parsers = parser.add_subparsers(dest='datasrc', required=True, help='Data source')
 
@@ -327,7 +337,7 @@ def main() -> None:
     try:
         operation_load_and_process(args)
     except InvalidScannerOperation as err:
-        print(err)
+        log(err)
 
 
 if __name__ == '__main__':
