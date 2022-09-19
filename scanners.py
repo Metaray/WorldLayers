@@ -1,7 +1,7 @@
 from pathlib import Path
 import numpy as np
 import uNBT as nbt
-from typing import Iterable, Tuple
+from typing import Any, Callable, Iterable, Tuple, Dict
 from time import perf_counter as clock
 from common import *
 
@@ -30,7 +30,7 @@ def scan_world_dimension(
     dim_id: int,
     scan_limit: int,
     bounds: Tuple[int, int],
-    **_
+    **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions >=1.2.1 <=1.12.2 (anvil format, before Flattening)"""
     from accelerators import scan_v2_accel
@@ -104,7 +104,7 @@ def scan_world_dimension_new(
     scan_limit: int,
     bounds: Tuple[int, int],
     save_properties: bool = True,
-    **_
+    **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions 1.13+ (anvil format, after Flattening)"""
     from accelerators import scan_v13_accel
@@ -211,7 +211,7 @@ def scan_world_dimension_old(
     save_path: str,
     dim_id: int,
     scan_limit: int,
-    **_
+    **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions <1.2.1 (region format)"""
     from accelerators import scan_v0_accel
@@ -256,7 +256,7 @@ def scan_world_dimension_old(
 def scan_world_dimension_alpha(
     save_path: str,
     scan_limit: int,
-    **_
+    **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions before beta 1.3 (infdev format)"""
     from accelerators import scan_v0_accel
@@ -295,7 +295,7 @@ def scan_world_dimension_alpha(
     )
 
 
-def determine_scan_function(save_path: str):
+def determine_scan_function(save_path: str) -> Callable[..., DimScanData]:
     # Since 1.9 version is stored in [level.dat].Data.DataVersion
     # First version after Flattening: 17w47a (data version: 1451)
     level_data = nbt.read_nbt_file(str(Path(save_path) / 'level.dat'))['Data']

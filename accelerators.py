@@ -1,5 +1,6 @@
 import ctypes
 import numpy as np
+from numpy.typing import NDArray
 import os
 import sys
 
@@ -29,9 +30,9 @@ _dsci_v0.argtypes = [
 _dsci_v0.restype = None
 
 def scan_v0_accel(
-    blockCount: np.ndarray,
-    blocks: np.ndarray,
-    metadata: np.ndarray
+    blockCount: NDArray[np.int64],
+    blocks: NDArray[np.uint8],
+    metadata: NDArray[np.uint8]
 ) -> None:
     _dsci_v0(blockCount, blocks, metadata)
 
@@ -49,13 +50,13 @@ _dsci_v2.argtypes = [
 _dsci_v2.restype = None
 
 def scan_v2_accel(
-    blockCount: np.ndarray,
+    blockCount: NDArray[np.int64],
     idLim: int,
     ySection: int,
-    blocks: np.ndarray,
-    add: np.ndarray,
-    add2: np.ndarray,
-    metadata: np.ndarray
+    blocks: NDArray[np.uint8],
+    add: NDArray[np.uint8],
+    add2: NDArray[np.uint8],
+    metadata: NDArray[np.uint8]
 ) -> None:
     _dsci_v2(blockCount, idLim, ySection, blocks, add, add2, metadata)
 
@@ -73,11 +74,11 @@ _dsci_v13.argtypes = [
 _dsci_v13.restype = None
 
 def scan_v13_accel(
-    blockCount: np.ndarray,
+    blockCount: NDArray[np.int64],
     idLim: int,
     ySection: int,
-    blockStates: np.ndarray,
-    paletteMap: np.ndarray,
+    blockStates: NDArray[np.int64],
+    paletteMap: NDArray[np.uint32],
     maxPaletteIdx: int,
     carry: bool
 ) -> None:

@@ -4,9 +4,11 @@ import numpy as np
 import json
 import re
 from collections import defaultdict
-from typing import IO, List, Tuple, Optional, Dict, Union
+from typing import IO, AnyStr, Iterable, List, Tuple, Optional, Dict, TypeVar, Union
+from numpy.typing import NDArray
 
 
+_T = TypeVar('_T')
 BlockState = Tuple[str, Optional[Dict[str, str]]]
 CompactState = str
 BlockMapping = Dict[CompactState, int]
@@ -17,7 +19,7 @@ BlockSelector = Union[str, BlockState]
 AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
 
 
-def open_resource(name: str, mode: str) -> IO:
+def open_resource(name: str, mode: str) -> IO[AnyStr]:
     if mode in {'r', 'rb'}:
         return (Path(__file__).parent / name).open(mode)
     raise ValueError('Can only open resource for reading')
@@ -129,7 +131,7 @@ class DimScanData:
 
     def __init__(
         self,
-        histogram: np.ndarray,
+        histogram: NDArray[np.int64],
         chunks_scanned: int,
         blockstate_to_idx: BlockMapping,
         base_y: int,
@@ -169,15 +171,15 @@ class DimScanData:
         return {idx: state for state, idx in self.blockstate_to_idx.items()}
     
     @property
-    def zero_histogram(self) -> np.ndarray:
+    def zero_histogram(self) -> NDArray[np.int64]:
         return np.zeros(self.height, self.histogram.dtype)
 
 
-def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> np.ndarray:
+def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> NDArray[np.int64]:
     if isinstance(blockstate, tuple):
         name, props = blockstate
     else:
-        name, props = blockstate, None
+        blockstate = name, props = blockstate, None
     
     # Support old system of directly choosing block ids
     if name.isnumeric():
@@ -226,14 +228,14 @@ def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> np.ndarray:
     raise ValueError(f'Mapping {serialize_blockstate(blockstate)} not found')
 
 
-def try_get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> np.ndarray:
+def try_get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> NDArray[np.int64]:
     try:
         return get_block_hist(scan, blockstate)
     except ValueError:
         return scan.zero_histogram
 
 
-def sum_blocks_selection(scan: DimScanData, selectors: List[BlockSelector]) -> np.ndarray:
+def sum_blocks_selection(scan: DimScanData, selectors: Iterable[BlockSelector]) -> NDArray[np.int64]:
     found_any = False
     hist = scan.zero_histogram
     for selector in selectors:
@@ -265,37 +267,26 @@ def crop_histogram(scan: DimScanData, bounds: Tuple[int, int]) -> None:
 def load_scan(path: str) -> DimScanData:
     data = nbt.read_nbt_file(path)
 
-    # Here are a bunch of checks and fallbacks to support old scan file versions
-    if 'Version' in data:
-        version = data['Version'].value
+    def get(name: str, default: _T) -> _T:
+        if name in data:
+            return data[name].value
     else:
-        version = 3
+            return default
+
+    # Here are a bunch of checks and fallback values to support old scan formats
+    version = get('Version', 3)
     
     chunks_scanned = data['ChunkCount'].value
     
     # Read IdLimit for backwards compatibility
-    if 'IdLimit' in data:
-        ID_LIM = data['IdLimit'].value
-    else:
-        ID_LIM = 2**12
+    id_count = get('IdLimit', 2**12)
+    state_count = get('StateCount', id_count * 16)
     
-    if 'StateCount' in data:
-        STATE_LIM = data['StateCount'].value
-    else:
-        STATE_LIM = ID_LIM * 16
-    
-    if 'ScanHeight' in data:
-        HEI_LIM = data['ScanHeight'].value
-    else:
-        HEI_LIM = 16 * 8
-    
-    if 'BaseY' in data:
-        base_y = data['BaseY'].value
-    else:
-        base_y = 0
+    height = get('ScanHeight', 128)
+    base_y = get('BaseY', 0)
 
-    dtype = np.dtype(data['DataType'].value) if 'DataType' in data else np.int64
-    block_counts = np.frombuffer(data['Data'].value, dtype).reshape((HEI_LIM, STATE_LIM))
+    dtype = np.dtype(get('DataType', 'int64'))
+    block_counts = np.frombuffer(data['Data'].value, dtype).reshape((height, state_count))
     
     blockstate_to_idx = {}
     for name, code in data['BlockMapping'].items():
@@ -349,9 +340,9 @@ def save_scan_data(extract_file: str, scan_data: DimScanData) -> None:
 
 
 def convert_to_new_bs_format(
-    block_counts: np.ndarray,
+    block_counts: NDArray[np.int64],
     blockstate_to_idx: BlockMapping
-) -> Tuple[np.ndarray, BlockMapping, Dict[int, CompactState]]:
+) -> Tuple[NDArray[np.int64], BlockMapping, Dict[int, CompactState]]:
     state_count = block_counts.shape[1]
 
     # Keep air at 0

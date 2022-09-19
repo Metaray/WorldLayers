@@ -1,7 +1,9 @@
 import argparse
 import threading
 import csv
-from typing import List, NamedTuple, Optional
+from typing import Any, List, NamedTuple, Optional, Iterable, Tuple
+import numpy as np
+from numpy.typing import NDArray
 from common import *
 from scanners import create_scan
 
@@ -105,11 +107,11 @@ def load_block_selection(selection: str) -> List[DisplayBlockSelector]:
     - Name of a file, prepended with "@", containing lines of display selectors.
       File can contain comments statring with "#".
     '''
-    selectors = []
+    selectors: List[str] = []
     for part in selection:
         if part.startswith('@'):
             with open(part[1:]) as f:
-                lines = f.readlines()
+                lines: Iterable[str] = f.readlines()
             lines = map(str.strip, lines)
             lines = filter(lambda s: s and not s.startswith('#'), lines)
             selectors.extend(lines)
@@ -132,26 +134,26 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
     if args.norm == 'base':
         y_label = f'Fraction relative to\n{args.normbase}'
         base_mx = sum_blocks_selection(scan_data, split_to_blockstates(args.normbase))
-        def norm_func(x: np.ndarray) -> np.ndarray:
+        def norm_func(x: NDArray[np.int64]) -> NDArray[np.float64]:
             return np.where(base_mx > 0, x / np.maximum(base_mx, 1), 0)
     
     elif args.norm == 'total':
         y_label = 'Fraction per block'
-        def norm_func(x: np.ndarray) -> np.ndarray:
+        def norm_func(x: NDArray[np.int64]) -> NDArray[np.float64]:
             return x / (16**2 * chunks_scanned)
     
     elif args.norm == 'chunk':
         y_label = 'Blocks per chunk layer'
-        def norm_func(x: np.ndarray) -> np.ndarray:
+        def norm_func(x: NDArray[np.int64]) -> NDArray[np.float64]:
             return x / chunks_scanned
     
     else:
         y_label = 'Total count per layer'
-        def norm_func(x: np.ndarray) -> np.ndarray:
-            return x
+        def norm_func(x: NDArray[np.int64]) -> NDArray[np.float64]:
+            return x.astype(np.float64)
 
     class GraphData(NamedTuple):
-        counts: np.ndarray
+        counts: NDArray[np.float64]
         color: Optional[str]
         label: str
     
@@ -172,9 +174,8 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
             print(f'Found no blocks matching selectors: {show_info.selectors}')
             hist = scan_data.zero_histogram
         
-        hist = norm_func(hist)
         graphs.append(GraphData(
-            counts=hist,
+            counts=norm_func(hist),
             color=show_info.color,
             label=display_name,
         ))
@@ -192,8 +193,7 @@ def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
     if args.solids:
         nonair_hist = (chunks_scanned * 16**2) - sum_blocks_selection(scan_data, AIR_BLOCKS)
-        graph = norm_func(nonair_hist)
-        ax.plot(y_range, graph, color='lightgray', label='Non-air')
+        ax.plot(y_range, norm_func(nonair_hist), color='lightgray', label='Non-air')
     
     ax.grid(True)
     ax.legend()
@@ -221,16 +221,15 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
 
     height = scan_data.height
     base_y = scan_data.base_y
-    y_range = list(range(base_y, base_y + height))
     
-    table = []
+    table: List[List[Any]] = []
     if args.showy:
-        table.append(['Y'] + y_range)
+        table.append(['Y'] + list(range(base_y, base_y + height)))
 
     if blocks_shown is not None:
         for show_info in blocks_shown:
             display_name = show_info.display_name or show_info.selectors
-            row = [display_name]
+            row: List[Any] = [display_name]
             try:
                 hist = sum_blocks_selection(scan_data, split_to_blockstates(show_info.selectors))
                 print(f'{display_name} = {hist.sum()} blocks')
@@ -284,7 +283,7 @@ def operation_load_and_process(args: argparse.Namespace) -> None:
         raise InvalidScannerOperation('Unknown scan data processing action')
 
 
-def main():
+def main() -> None:
     def add_operation_parsers(parser: argparse.ArgumentParser) -> None:
         subparsers = parser.add_subparsers(dest='vismode', required=True, help='Visualization mode')
         
