@@ -132,7 +132,7 @@ def parse_block_selection(selectors: List[str]) -> List[DisplayBlockSelector]:
     return blocks_shown
 
 
-def load_block_selection(selection: str) -> List[DisplayBlockSelector]:
+def load_block_selection(selection: List[str]) -> List[DisplayBlockSelector]:
     '''Parse block selection argument from command line
 
     Each selection may be:
@@ -247,10 +247,7 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
     if args.layers:
         crop_histogram(scan_data, args.layers)
 
-    if '*' in args.select:
-        blocks_shown = None
-    else:
-        blocks_shown = load_block_selection(args.select)
+    blocks_shown = load_block_selection(args.select)
 
     height = scan_data.height
     base_y = scan_data.base_y
@@ -259,7 +256,7 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
     if args.showy:
         table.append(['Y'] + list(range(base_y, base_y + height)))
 
-    if blocks_shown is not None:
+    if blocks_shown:
         for show_info in blocks_shown:
             display_name = show_info.display_name or show_info.selectors
             row: List[Any] = [display_name]
@@ -343,7 +340,7 @@ def main() -> None:
         parse_vis_plot.add_argument('--savefig', default=None, help='Save plot to specified file instead of displaying in a window')
 
         parse_vis_csv = subparsers.add_parser('csv', help='Print selected block histograms as CSV')
-        parse_vis_csv.add_argument('select', nargs='+', help='Any number of selector arguments or one argument "*" to output all blocks')
+        parse_vis_csv.add_argument('select', nargs='*', help='Any number of selector arguments or none to output all blocks')
         parse_vis_csv.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to output (default is full range)')
         parse_vis_csv.add_argument('--bylayer', action='store_true', help='Print counts for each Y layer on a separate line (default is line per selector)')
         parse_vis_csv.add_argument('--showy', action='store_true', help='Add Y level column to CSV')

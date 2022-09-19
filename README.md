@@ -119,7 +119,7 @@ print [--sort ORDER] [--sumstates] [--layers LAYERS]
 Print selected block histograms as CSV:
 csv [--layers LAYERS] [--bylayer] [--showy] <selectors...>
     selectors               Any number of selector arguments (see below)
-                            or one argument "*" to output all blocks
+                            or none to output all blocks
     --layers LAYERS         Vertical range to output (default is full range)
     --bylayer               Print counts for each Y layer on a separate line
                             (default is line per selector)
