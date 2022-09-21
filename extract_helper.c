@@ -131,15 +131,16 @@ EXPORTED_API void dsci_v13(
     const _Bool carry
 ) {
     uint32_t idxBits = 4;
-    while ((1u << idxBits) < maxPaletteIdx + 1) {
+    while (idxBits < 12 && (1u << idxBits) < maxPaletteIdx + 1) {
         idxBits++;
     }
     
     uint16_t paletteIdxs[16 * 16 * 16];
-    if (carry)
+    if (carry) {
         unpack_block_idxs_wc(blockStates, idxBits, paletteIdxs);
-    else
+    } else {
         unpack_block_idxs_nc(blockStates, idxBits, paletteIdxs);
+    }
     
     for (size_t y = 0; y < 16; ++y) {
         for (size_t zx = 0; zx < (16 * 16); ++zx) {

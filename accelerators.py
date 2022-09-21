@@ -8,10 +8,15 @@ import sys
 __all__ = ['scan_v0_accel', 'scan_v2_accel', 'scan_v13_accel']
 
 
-if sys.platform == 'win32':
-    _lib_name = 'extract_helper.dll'
-else:
-    _lib_name = 'extract_helper.so'
+def _shared_object_ext():
+    return {
+        'win32': '.dll',
+        'cygwin': '.dll',
+        'darwin': '.dylib',
+    }.get(sys.platform, '.so')
+
+
+_lib_name = 'extract_helper' + _shared_object_ext()
 _accel_lib = ctypes.CDLL(os.path.join(os.path.dirname(__file__), _lib_name))
 
 
