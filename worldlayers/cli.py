@@ -5,8 +5,8 @@ import re
 from typing import Any, List, NamedTuple, Optional, Iterable, Tuple
 import numpy as np
 from numpy.typing import NDArray
-from common import *
-from scanners import create_scan
+from .common import *
+from .scanners import create_scan
 
 
 class InvalidScannerOperation(Exception):

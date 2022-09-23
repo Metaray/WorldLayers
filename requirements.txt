@@ -8,4 +8,4 @@ Pillow==9.2.0
 pyparsing==3.0.9
 python-dateutil==2.8.2
 six==1.16.0
--e git+https://github.com/Metaray/uNBT.git@ab4163c8a7529c04e4433c758de66480e2e51fe4#egg=uNBT
+-e git+https://github.com/Metaray/uNBT.git@1ef333d7160a61ece2a5b7251a74582ca2ae8278#egg=uNBT

@@ -44,27 +44,32 @@ minecraft:copper_ore = 5722340	(0.123824%)	(101.4365 b/ch)
 
 ### Requirements
 - Python 3.9 or newer
-- Libraries: [uNBT](https://github.com/Metaray/uNBT), numpy, matplotlib
-- C compiler (for building accelerators library)
+- setuptools & C compiler
 
 ### Steps
-1. Install Python dependencies
+1. (optional) Setup virtual environment
+    
+    Create `python -m venv .venv`
+
+    Activate `./.venv/Scripts/activate`
+
+2. Install Python dependencies
     
     `pip install -r requirements.txt`
 
-2. Compile accelerators library
+    This is needed to install [uNBT](https://github.com/Metaray/uNBT) which is not on PyPI
 
-    Run `build_accelerators.py` if you have C compiler that is visible to Python's `distutils` library.
-    
-    Or manually compile `extract_helper.c` into shared library with the same name. For example on Windows with GCC:
+3. Run setup.py
 
-    `gcc -Wall -Wextra -O3 -march=native -shared extract_helper.c -o extract_helper.dll`
+    `pip install .`
+
+    Or `setup.py install`
 
 
 ## Command line syntax
-`cli.py <data source command> [options...] <visualization command> [options...]`
+`worldlayers <source command> [options...] <visualization command> [options...]`
 
-To display help in terminal use `cli.py -h` or `--help`
+To display help in terminal use `worldlayers -h` or `--help`
 
 ### Data source commands
 ```
@@ -167,18 +172,18 @@ namespace of "minecraft:"
 ## Example usage
 - Scan full height range of 1.19 Overworld and save results
 
-    `cli.py extract "MC 1.19 World" --limit=-64:256 save my_1.19_scan.dat`
+    `worldlayers extract "MC 1.19 World" --limit=-64:256 save my_1.19_scan.dat`
 
 - Do a small scan (500 chunks) of Nether and display block counts
 
-    `cli.py extract "MC 1.19 World" --dim=-1 --limit=500 print`
+    `worldlayers extract "MC 1.19 World" --dim=-1 --limit=500 print`
 
 - Load scan and display block counts without separating states
 
-    `cli.py load my_1.19_scan.dat print --sumstates`
+    `worldlayers load my_1.19_scan.dat print --sumstates`
 
 - Load scan and plot ore distribution (selectors are inside a file "vanilla_ores")
 
-    `cli.py load my_1.19_scan.dat plot @vanilla_ores`
+    `worldlayers load my_1.19_scan.dat plot @vanilla_ores`
 
 Sample scan data and selector files are provided in `sample-data` directory.

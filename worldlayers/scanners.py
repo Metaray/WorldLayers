@@ -3,7 +3,7 @@ import numpy as np
 import uNBT as nbt
 from typing import Any, Callable, Iterable, Tuple, Dict
 from time import perf_counter as clock
-from common import *
+from .common import *
 
 _CTR_DTYPE = np.int64 # Histogram counter type
 
@@ -33,7 +33,7 @@ def scan_world_dimension(
     **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions >=1.2.1 <=1.12.2 (anvil format, before Flattening)"""
-    from accelerators import scan_v2_accel
+    from .accelerators import scan_v2_accel
 
     ID_LIM = 2**12
     STATE_LIM = 16 * ID_LIM
@@ -107,7 +107,7 @@ def scan_world_dimension_new(
     **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions 1.13+ (anvil format, after Flattening)"""
-    from accelerators import scan_v13_accel
+    from .accelerators import scan_v13_accel
 
     # Data version notes:
     # 2529 - 20w17a (pre 1.16) - Blockstate bits no longer packed across 64 bit words
@@ -214,7 +214,7 @@ def scan_world_dimension_old(
     **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions <1.2.1 (region format)"""
-    from accelerators import scan_v0_accel
+    from .accelerators import scan_v0_accel
 
     # Hardcoded limits for old versions
     # TODO: old modpacks had ID extender mod (something analogous to 'Add' array in newer versions?)
@@ -259,7 +259,7 @@ def scan_world_dimension_alpha(
     **_: Dict[str, Any]
 ) -> DimScanData:
     """Scanner for versions before beta 1.3 (infdev format)"""
-    from accelerators import scan_v0_accel
+    from .accelerators import scan_v0_accel
 
     # Hardcoded limits for old versions
     STATE_LIM, MAX_HEIGHT = 256 * 16, 128
