@@ -2,11 +2,12 @@ import argparse
 import threading
 import csv
 import re
+import sys
 from typing import Any, List, NamedTuple, Optional, Iterable, Tuple
 import numpy as np
 from numpy.typing import NDArray
-from common import *
-from scanners import create_scan
+from worldlayers.common import BlockSelector, DimScanData, AIR_BLOCKS, parse_blockstate, save_scan_data, load_scan, crop_histogram, sum_blocks_selection
+from worldlayers.scanners import create_scan
 
 
 class InvalidScannerOperation(Exception):
@@ -21,6 +22,10 @@ class DisplayBlockSelector(NamedTuple):
     color: Optional[str]
     # Legend name override / None - equal to `names`
     display_name: Optional[str]
+
+
+def log(*args: object) -> None:
+    print(*args, file=sys.stderr)
 
 
 def split_to_blockstates(combined: str) -> List[BlockSelector]:
