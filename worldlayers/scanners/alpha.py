@@ -1,7 +1,18 @@
+from pathlib import Path
 import numpy as np
-from typing import Any, Dict
+import uNBT as nbt
+from typing import Any, Dict, Iterable
 from ..common import DimScanData, load_old_blockid_mapping, convert_to_new_bs_format
-from .common import iter_world_chunks, CTR_DTYPE
+from .common import CTR_DTYPE
+
+
+def iter_chunks_alpha(save_path: str) -> Iterable[nbt.TagCompound]:
+    # Alpha format has same data as Region, but chunks are stored in individual files
+    # Numbers are base36 encoded
+    # 2 folder layers: first is X % 64, second is Z % 64
+    # Chunk file name: c.X.Y.dat
+    for file in Path(save_path).glob('*/*/c.*.*.dat'):
+        yield nbt.read_nbt_file(str(file))
 
 
 def scan_world_dimension_alpha(
@@ -19,7 +30,7 @@ def scan_world_dimension_alpha(
     chunks_scanned = 0
     block_counts = np.zeros((MAX_HEIGHT, STATE_LIM), CTR_DTYPE)
 
-    for chunk_nbt in iter_world_chunks(save_path, 0, 'alpha'):
+    for chunk_nbt in iter_chunks_alpha(save_path):
         level_data = chunk_nbt['Level']
         if not ('TerrainPopulated' in level_data and level_data['TerrainPopulated'].value):
             continue
