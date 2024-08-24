@@ -25,6 +25,7 @@ def scan_world_dimension_new(
         'decorated', 'lighted', 'mobs_spawned', 'finalized', 'postprocessed',  # 1.13
         'fullchunk',
         'features', 'light', 'spawn', 'heightmaps', 'full',  # 1.14+
+        'minecraft:features', 'minecraft:initialize_light', 'minecraft:light', 'minecraft:spawn', 'minecraft:full',  # 1.18+ (?)
     }
 
     # Set air index to zero for convinience
