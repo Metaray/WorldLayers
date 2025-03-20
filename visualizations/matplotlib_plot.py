@@ -1,11 +1,20 @@
-import argparse
 from common import log, split_to_blockstates, load_block_selection
 from numpy.typing import NDArray
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Tuple
 from worldlayers.common import DimScanData, AIR_BLOCKS, crop_histogram, sum_blocks_selection
 
 
-def visualize_plot(args: argparse.Namespace, scan_data: DimScanData) -> None:
+class VisPlotArguments(NamedTuple):
+    layers: Tuple[int, int] | None
+    select: list[str]
+    norm: str
+    normbase: str
+    cumulative: bool
+    solids: bool
+    savefig: bool
+
+
+def visualize_plot(args: VisPlotArguments, scan_data: DimScanData) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
     import numpy as np

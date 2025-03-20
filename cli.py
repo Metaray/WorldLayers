@@ -2,24 +2,31 @@ import argparse
 import threading
 import re
 from common import InvalidScannerOperation, log
-from typing import Tuple
-from visualizations.matplotlib_plot import visualize_plot
-from visualizations.print_readable import visualize_print
-from visualizations.print_as_csv import vis_print_as_csv
+from typing import Tuple, NamedTuple
+from visualizations.matplotlib_plot import VisPlotArguments, visualize_plot
+from visualizations.print_readable import VisPrintArguments, visualize_print
+from visualizations.print_as_csv import VisPrintAsCsvArguments, vis_print_as_csv
 from worldlayers.common import DimScanData, save_scan_data, load_scan
 from worldlayers.scanners import create_scan
 
 
-def operation_save(args: argparse.Namespace, scan_data: DimScanData) -> None:
+class OpSaveArguments(NamedTuple):
+    output: str
+
+
+def operation_save(args: OpSaveArguments, scan_data: DimScanData) -> None:
     extract_file = args.output
     save_scan_data(extract_file, scan_data)
     log(f'Saved block counts to {extract_file}')
 
 
 def operation_load_and_process(args: argparse.Namespace) -> None:
-    if args.datasrc == 'load':
+    data_src: str = args.datasrc
+    vis_mode: str = args.vismode
+
+    if data_src == 'load':
         scan_data = load_scan(args.statfile)
-    elif args.datasrc == 'extract':
+    elif data_src == 'extract':
         scan_limit = args.limit or 2**32
         bounds = (0, 128)
         if args.layers:
@@ -31,18 +38,44 @@ def operation_load_and_process(args: argparse.Namespace) -> None:
         raise InvalidScannerOperation('Unknown scan data source')
     
     # Save new histogram even if it isn't a goal
-    if args.datasrc != 'load' and args.vismode != 'save':
+    if data_src != 'load' and vis_mode != 'save':
         t = threading.Thread(target=save_scan_data, args=('.last_scan.dat', scan_data.copy()))
         t.start()
 
-    if args.vismode == 'print':
-        visualize_print(args, scan_data)
-    elif args.vismode == 'plot':
-        visualize_plot(args, scan_data)
-    elif args.vismode == 'csv':
-        vis_print_as_csv(args, scan_data)
-    elif args.vismode == 'save':
-        operation_save(args, scan_data)
+    if vis_mode == 'print':
+        visualize_print(
+            VisPrintArguments(
+                layers=args.layers,
+                sumstates=args.sumstates,
+                sort=args.sort,
+            ),
+            scan_data
+        )
+    elif vis_mode == 'plot':
+        visualize_plot(
+            VisPlotArguments(
+                layers=args.layers,
+                select=args.select,
+                norm=args.norm,
+                normbase=args.normbase,
+                cumulative=args.cumulative,
+                solids=args.solids,
+                savefig=args.savefig,
+            ),
+            scan_data
+        )
+    elif vis_mode == 'csv':
+        vis_print_as_csv(
+            VisPrintAsCsvArguments(
+                layers=args.layers,
+                select=args.select,
+                showy=args.showy,
+                bylayer=args.bylayer,
+            ),
+            scan_data
+        )
+    elif vis_mode == 'save':
+        operation_save(OpSaveArguments(output=args.output), scan_data)
     else:
         raise InvalidScannerOperation('Unknown scan data processing action')
 

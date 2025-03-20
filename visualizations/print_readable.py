@@ -1,12 +1,17 @@
-import argparse
 import numpy as np
 from common import log
 from numpy.typing import NDArray
-from typing import Tuple
-from worldlayers.common import DimScanData, AIR_BLOCKS, crop_histogram, sum_blocks_selection
+from typing import Tuple, NamedTuple
+from worldlayers.common import CompactState, DimScanData, AIR_BLOCKS, crop_histogram, sum_blocks_selection
 
 
-def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
+class VisPrintArguments(NamedTuple):
+    layers: Tuple[int, int] | None
+    sumstates: bool
+    sort: str
+
+
+def visualize_print(args: VisPrintArguments, scan_data: DimScanData) -> None:
     if args.layers:
         crop_histogram(scan_data, args.layers)
     
@@ -14,6 +19,7 @@ def visualize_print(args: argparse.Namespace, scan_data: DimScanData) -> None:
     histogram = scan_data.histogram
     volume = chunks_scanned * scan_data.height * 16**2
 
+    visdata: list[tuple[int | None, NDArray[np.int64] | int, CompactState]]
     if args.sumstates:
         visdata = [
             (

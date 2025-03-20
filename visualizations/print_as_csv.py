@@ -1,10 +1,16 @@
-import argparse
 from common import log, split_to_blockstates, load_block_selection
-from typing import Any, List
+from typing import Any, List, NamedTuple, Tuple
 from worldlayers.common import DimScanData, crop_histogram, sum_blocks_selection
 
 
-def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
+class VisPrintAsCsvArguments(NamedTuple):
+    layers: Tuple[int, int] | None
+    select: list[str]
+    showy: bool
+    bylayer: bool
+
+
+def vis_print_as_csv(args: VisPrintAsCsvArguments, scan_data: DimScanData) -> None:
     if args.layers:
         crop_histogram(scan_data, args.layers)
 
@@ -36,8 +42,8 @@ def vis_print_as_csv(args: argparse.Namespace, scan_data: DimScanData) -> None:
             table.append(row)
 
     if args.bylayer:
-        for graph in zip(*table):
-            print(*graph, sep=',')
+        for layer in zip(*table):
+            print(*layer, sep=',')
     else:
         for graph in table:
             print(*graph, sep=',')
