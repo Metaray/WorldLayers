@@ -2,7 +2,7 @@ import numpy as np
 from common import log
 from numpy.typing import NDArray
 from typing import Tuple, NamedTuple
-from worldlayers.common import CompactState, DimScanData, AIR_BLOCKS, crop_histogram, sum_blocks_selection
+from worldlayers.common import DimScanData, AIR_BLOCKS, crop_histogram, sum_block_states, sum_blocks_selection
 
 
 class VisPrintArguments(NamedTuple):
@@ -15,23 +15,19 @@ def visualize_print(args: VisPrintArguments, scan_data: DimScanData) -> None:
     if args.layers:
         crop_histogram(scan_data, args.layers)
     
+    # Log before destructive data modification
+    log(f'{len(scan_data.name_to_blockstates)} unique blocks')
+    log(f'{scan_data.state_count} block states')
+
+    if args.sumstates:
+        scan_data = sum_block_states(scan_data)
+    
     chunks_scanned = scan_data.chunks_scanned
     histogram = scan_data.histogram
     volume = chunks_scanned * scan_data.height * 16**2
-
-    visdata: list[tuple[int | None, NDArray[np.int64] | int, CompactState]]
-    if args.sumstates:
-        visdata = [
-            (
-                None,
-                sum(histogram[:, scan_data.blockstate_to_idx[state]] for state in states),
-                name,
-            )
-            for name, states in scan_data.name_to_blockstates.items()
-        ]
-    else:
-        idx_to_blockstate = scan_data.idx_to_blockstate
-        visdata = [(i, histogram[:, i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
+    
+    idx_to_blockstate = scan_data.idx_to_blockstate
+    visdata = [(i, histogram[:, i], idx_to_blockstate[i]) for i in range(scan_data.state_count)]
 
     if args.sort == 'count':
         visdata.sort(key=lambda ci: -np.sum(ci[1]))  # sort by block count descending
@@ -75,9 +71,6 @@ def visualize_print(args: VisPrintArguments, scan_data: DimScanData) -> None:
             f'(Y {ymin} ~ {ymax})',
             sep='\t',
         )
-
-    log(f'{len(scan_data.name_to_blockstates)} unique blocks')
-    log(f'{scan_data.state_count} block states')
 
     air_hist = sum_blocks_selection(scan_data, AIR_BLOCKS)
     show_count('Nonair blocks', histogram.sum(axis=1) - air_hist)
