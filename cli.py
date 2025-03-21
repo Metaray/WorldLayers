@@ -3,7 +3,7 @@ import threading
 import re
 from common import InvalidScannerOperation, log
 from typing import Tuple, NamedTuple
-from visualizations.matplotlib_plot import VisPlotArguments, visualize_plot
+from visualizations.matplotlib_plot import VisPlotArguments, VisStackPlotArguments, visualize_mass_stack_plot, visualize_plot
 from visualizations.print_readable import VisPrintArguments, visualize_print
 from visualizations.print_as_csv import VisPrintAsCsvArguments, vis_print_as_csv
 from worldlayers.common import DimScanData, save_scan_data, load_scan
@@ -64,6 +64,14 @@ def operation_load_and_process(args: argparse.Namespace) -> None:
             ),
             scan_data
         )
+    elif vis_mode == 'stackplot':
+        visualize_mass_stack_plot(
+            VisStackPlotArguments(
+                log_scale=args.logscale,
+                sum_states=not args.nosum,
+            ),
+            scan_data
+        )
     elif vis_mode == 'csv':
         vis_print_as_csv(
             VisPrintAsCsvArguments(
@@ -105,6 +113,10 @@ def main() -> None:
         parse_vis_plot.add_argument('--cumulative', action='store_true', help='Display as cumulative graph')
         parse_vis_plot.add_argument('--layers', type=parse_dashed_range, default=None, help='Vertical range to display (default is full range)')
         parse_vis_plot.add_argument('--savefig', default=None, help='Save plot to specified file instead of displaying in a window')
+
+        vis_stack_plot = subparsers.add_parser('stackplot', help='Plot everything as stack plot')
+        vis_stack_plot.add_argument('--logscale', action='store_true', help='Use logarithmic scale for counts')
+        vis_stack_plot.add_argument('--nosum', action='store_true', help='Don\'t sum up distinct states of a block')
 
         parse_vis_csv = subparsers.add_parser('csv', help='Print selected block histograms as CSV')
         parse_vis_csv.add_argument('select', nargs='*', help='Any number of selector arguments or none to output all blocks')

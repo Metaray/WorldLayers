@@ -1,7 +1,8 @@
+import numpy as np
 from common import log, split_to_blockstates, load_block_selection
 from numpy.typing import NDArray
 from typing import List, NamedTuple, Optional, Tuple
-from worldlayers.common import DimScanData, AIR_BLOCKS, crop_histogram, sum_blocks_selection
+from worldlayers.common import DimScanData, AIR_BLOCKS, crop_histogram, sum_block_states, sum_blocks_selection
 
 
 class VisPlotArguments(NamedTuple):
@@ -17,7 +18,6 @@ class VisPlotArguments(NamedTuple):
 def visualize_plot(args: VisPlotArguments, scan_data: DimScanData) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.ticker import MaxNLocator
-    import numpy as np
     
     if args.layers:
         crop_histogram(scan_data, args.layers)
@@ -102,3 +102,44 @@ def visualize_plot(args: VisPlotArguments, scan_data: DimScanData) -> None:
         plt.savefig(args.savefig, dpi=300)
     else:
         plt.show()
+
+
+class VisStackPlotArguments(NamedTuple):
+    log_scale: bool
+    sum_states: bool
+
+
+def visualize_mass_stack_plot(args: VisStackPlotArguments, scan_data: DimScanData) -> None:
+    import matplotlib.pyplot as plt
+
+    if args.sum_states:
+        scan_data = sum_block_states(scan_data)
+
+    base_y = scan_data.base_y
+    height = scan_data.height
+    y_range = list(range(base_y, base_y + height))
+
+    layers = np.swapaxes(scan_data.histogram, 0, 1)
+    idxs = np.arange(layers.shape[0])
+    
+    select = np.sum(layers, axis=1) > 0
+    layers = layers[select,:]
+    idxs = idxs[select]
+    
+    order = np.argsort(np.sum(layers, axis=1))
+    layers = layers[order,:]
+    idxs = idxs[order]
+
+    idx_map = scan_data.idx_to_blockstate
+    labels = [idx_map[i] for i in idxs]
+
+    print(len(labels))
+
+    plt.stackplot(y_range, layers, labels=labels)
+
+    if args.log_scale:
+        plt.yscale('log')
+    
+    plt.grid(True)
+    # plt.legend()
+    plt.show()

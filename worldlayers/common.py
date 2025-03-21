@@ -15,6 +15,8 @@ CompactState = str
 BlockMapping = Dict[CompactState, int]
 BlockMappingInverse = Dict[int, CompactState]
 BlockSelector = Union[str, BlockState]
+ScanHistogram = NDArray[np.int64]
+BlockHistogram = NDArray[np.int64]
 
 
 AIR_BLOCKS = ('minecraft:air', 'minecraft:cave_air', 'minecraft:void_air')
@@ -128,7 +130,7 @@ class DimScanData:
 
     def __init__(
         self,
-        histogram: NDArray[np.int64],
+        histogram: ScanHistogram,
         chunks_scanned: int,
         blockstate_to_idx: BlockMapping,
         base_y: int,
@@ -168,11 +170,11 @@ class DimScanData:
         return {idx: state for state, idx in self.blockstate_to_idx.items()}
     
     @property
-    def zero_histogram(self) -> NDArray[np.int64]:
+    def zero_histogram(self) -> BlockHistogram:
         return np.zeros(self.height, self.histogram.dtype)
 
 
-def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> NDArray[np.int64]:
+def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> BlockHistogram:
     if isinstance(blockstate, tuple):
         name, props = blockstate
     else:
@@ -225,14 +227,14 @@ def get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> NDArray[np.i
     raise ValueError(f'Mapping {serialize_blockstate(blockstate)} not found')
 
 
-def try_get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> NDArray[np.int64]:
+def try_get_block_hist(scan: DimScanData, blockstate: BlockSelector) -> BlockHistogram:
     try:
         return get_block_hist(scan, blockstate)
     except ValueError:
         return scan.zero_histogram
 
 
-def sum_blocks_selection(scan: DimScanData, selectors: Iterable[BlockSelector]) -> NDArray[np.int64]:
+def sum_blocks_selection(scan: DimScanData, selectors: Iterable[BlockSelector]) -> BlockHistogram:
     found_any = False
     hist = scan.zero_histogram
     for selector in selectors:
@@ -259,6 +261,25 @@ def crop_histogram(scan: DimScanData, bounds: Tuple[int, int]) -> None:
         return
     scan.histogram = scan.histogram[y_low-scan.base_y:y_hi-scan.base_y]
     scan.base_y = y_low
+
+
+def sum_block_states(scan: DimScanData) -> DimScanData:
+    histogram: list[BlockHistogram] = []
+    block_names: list[str] = []
+
+    for name, states in scan.name_to_blockstates.items():
+        idxs = [scan.blockstate_to_idx[state] for state in states]
+        block_hist = np.sum(scan.histogram[:,idxs], axis=1)
+
+        block_names.append(name)
+        histogram.append(block_hist)
+
+    return DimScanData(
+        histogram=np.asarray(histogram).T,
+        chunks_scanned=scan.chunks_scanned,
+        blockstate_to_idx={state: i for i, state in enumerate(block_names)},
+        base_y=scan.base_y,
+    )
 
 
 def load_scan(path: str) -> DimScanData:
@@ -337,9 +358,9 @@ def save_scan_data(extract_file: str, scan_data: DimScanData) -> None:
 
 
 def convert_to_new_bs_format(
-    block_counts: NDArray[np.int64],
+    block_counts: ScanHistogram,
     blockstate_to_idx: BlockMapping
-) -> Tuple[NDArray[np.int64], BlockMapping, Dict[int, CompactState]]:
+) -> Tuple[ScanHistogram, BlockMapping, Dict[int, CompactState]]:
     state_count = block_counts.shape[1]
 
     # Keep air at 0
